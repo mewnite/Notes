@@ -18,6 +18,7 @@ const GistManager = (function() {
     function init() {
         token = localStorage.getItem(STORAGE_KEY_TOKEN);
         gistId = localStorage.getItem(STORAGE_KEY_GIST_ID);
+        console.log('[GistManager] Init - Token exists:', !!token, 'Gist ID:', gistId);
         return isAuthenticated();
     }
 
@@ -36,6 +37,7 @@ const GistManager = (function() {
     function setGistId(newGistId) {
         gistId = newGistId;
         localStorage.setItem(STORAGE_KEY_GIST_ID, newGistId);
+        console.log('[GistManager] Saved Gist ID:', newGistId);
     }
 
     function logout() {
@@ -56,10 +58,12 @@ const GistManager = (function() {
         const options = { method, headers };
         if (body) options.body = JSON.stringify(body);
 
+        console.log('[GistManager] API Request:', method, endpoint);
         const response = await fetch(`${API_BASE}${endpoint}`, options);
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
+            console.error('[GistManager] API Error:', response.status, error);
             throw new Error(error.message || `HTTP ${response.status}`);
         }
 
@@ -78,32 +82,69 @@ const GistManager = (function() {
         return response.json();
     }
 
-    async function getOrCreateGist() {
-        try {
-            // First try to get gist by stored ID
-            if (gistId) {
-                try {
-                    const gist = await apiRequest(`/gists/${gistId}`);
-                    return gist;
-                } catch (e) {
-                    console.log('Gist not found by ID, searching...');
-                }
-            }
-
-            // Try to find existing gist by searching user's gists
+    // Search for existing Gist by description
+    async function findExistingGist() {
+        console.log('[GistManager] Searching for existing Gist...');
+        
+        // Try to get by stored ID first
+        if (gistId) {
             try {
-                const gists = await apiRequest('/gists');
+                console.log('[GistManager] Trying stored ID:', gistId);
+                const gist = await apiRequest(`/gists/${gistId}`);
+                console.log('[GistManager] Found by ID!');
+                return gist;
+            } catch (e) {
+                console.log('[GistManager] Stored ID not found');
+            }
+        }
+
+        // Search through all user gists (paginated)
+        let page = 1;
+        while (true) {
+            try {
+                console.log('[GistManager] Fetching gists page:', page);
+                const gists = await apiRequest(`/gists?page=${page}&per_page=100`);
+                
+                if (!gists || gists.length === 0) {
+                    console.log('[GistManager] No more gists');
+                    break;
+                }
+
                 for (const gist of gists) {
-                    if (gist.files && gist.files[GIST_FILENAME]) {
-                        setGistId(gist.id); // Store for future use
+                    // Check by description OR by filename
+                    if (gist.description === GIST_DESCRIPTION || 
+                        (gist.files && gist.files[GIST_FILENAME])) {
+                        console.log('[GistManager] Found existing Gist:', gist.id);
                         return gist;
                     }
                 }
+
+                // If less than 100 results, we're done
+                if (gists.length < 100) break;
+                page++;
             } catch (e) {
-                console.log('Could not search gists, creating new one');
+                console.error('[GistManager] Error fetching gists:', e);
+                break;
+            }
+        }
+
+        console.log('[GistManager] No existing Gist found, will create new one');
+        return null;
+    }
+
+    async function getOrCreateGist() {
+        try {
+            // Try to find existing Gist
+            const existingGist = await findExistingGist();
+            
+            if (existingGist) {
+                // Store the ID for future use
+                setGistId(existingGist.id);
+                return existingGist;
             }
 
-            // Create new gist with empty notes
+            // Create new Gist
+            console.log('[GistManager] Creating new Gist...');
             const emptyData = {
                 version: '2.0',
                 lastSync: new Date().toISOString(),
@@ -112,9 +153,10 @@ const GistManager = (function() {
             };
 
             const newGist = await createGist(emptyData);
+            console.log('[GistManager] Created new Gist:', newGist.id);
             return newGist;
         } catch (error) {
-            console.error('Error getting/creating gist:', error);
+            console.error('[GistManager] Error in getOrCreateGist:', error);
             throw error;
         }
     }
@@ -136,10 +178,12 @@ const GistManager = (function() {
 
     async function readNotes() {
         try {
+            console.log('[GistManager] Reading notes...');
             const gist = await getOrCreateGist();
             const file = gist.files[GIST_FILENAME];
             
             if (!file || !file.content) {
+                console.log('[GistManager] Empty Gist, returning default');
                 return {
                     version: '2.0',
                     lastSync: new Date().toISOString(),
@@ -148,10 +192,14 @@ const GistManager = (function() {
                 };
             }
 
+            console.log('[GistManager] Gist content length:', file.content.length);
             const data = JSON.parse(file.content);
+            console.log('[GistManager] Notes count:', data.notes?.length || 0, 'Files count:', data.files?.length || 0);
             return data;
         } catch (error) {
-            console.error('Error reading notes:', error);
+            console.error('[GistManager] Error reading notes:', error);
+            
+            // Try local cache
             const cachedNotes = localStorage.getItem('notes_sync_local_notes');
             const cachedFiles = localStorage.getItem('notes_sync_local_files');
             
@@ -169,14 +217,18 @@ const GistManager = (function() {
 
     async function writeNotes(data) {
         try {
+            console.log('[GistManager] Writing notes...');
+            
+            // Save to local cache first
             localStorage.setItem('notes_sync_local_notes', JSON.stringify(data.notes));
             localStorage.setItem('notes_sync_local_files', JSON.stringify(data.files));
 
             if (!gistId) {
-                await createGist(data);
-                return;
+                console.log('[GistManager] No Gist ID, creating...');
+                await getOrCreateGist();
             }
 
+            console.log('[GistManager] Updating Gist:', gistId);
             await apiRequest(`/gists/${gistId}`, 'PATCH', {
                 description: GIST_DESCRIPTION,
                 files: {
@@ -185,8 +237,9 @@ const GistManager = (function() {
                     }
                 }
             });
+            console.log('[GistManager] Write successful!');
         } catch (error) {
-            console.error('Error writing notes:', error);
+            console.error('[GistManager] Error writing notes:', error);
             throw error;
         }
     }
