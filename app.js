@@ -193,10 +193,18 @@
     // Sync to GitHub - handles queue
     async function syncToGitHub() {
         if (state.isSaving) return;
-        
+
+        // If offline, skip remote sync but keep local cache current
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            console.warn('Offline - skipping GitHub sync');
+            updateSaveStatus('error');
+            showToast('Sin conexión - guardado local', 'info');
+            return;
+        }
+
         state.isSaving = true;
         updateSaveStatus('saving');
-        
+
         try {
             const data = {
                 version: '2.0',
@@ -204,14 +212,14 @@
                 notes: state.notes,
                 files: state.files
             };
-            
+
             await GistManager.writeNotes(data);
             state.lastSaveTime = Date.now();
             updateSaveStatus('saved');
-            
+
             // Update local cache after successful sync
             saveToLocalCache();
-            
+
         } catch (error) {
             console.error('Sync failed:', error);
             updateSaveStatus('error');
@@ -291,7 +299,8 @@
         
         updateWordCount();
         
-        // Immediate local save + queued sync
+        // Immediate local save (synchronous) + queued sync for remote
+        try { saveToLocalCache(); } catch (e) { console.warn('Local save failed', e); }
         queueSave();
     }
 
@@ -753,4 +762,22 @@
     }
 
     document.addEventListener('DOMContentLoaded', init);
+
+    // Ensure local cache is flushed and attempt a keepalive sync on unload
+    window.addEventListener('beforeunload', (e) => {
+        try {
+            saveToLocalCache();
+        } catch (err) {
+            console.warn('Error saving local cache on unload', err);
+        }
+
+        try {
+            const data = { version: '2.0', lastSync: new Date().toISOString(), notes: state.notes, files: state.files };
+            if (GistManager && typeof GistManager.writeNotesKeepalive === 'function') {
+                GistManager.writeNotesKeepalive(data);
+            }
+        } catch (err) {
+            console.warn('Keepalive sync failed on unload', err);
+        }
+    });
 })();

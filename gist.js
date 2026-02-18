@@ -55,19 +55,42 @@ const GistManager = (function() {
             'Content-Type': 'application/json'
         };
 
-        const options = { method, headers };
-        if (body) options.body = JSON.stringify(body);
+        const optionsBase = { method, headers };
+        if (body) optionsBase.body = JSON.stringify(body);
 
-        console.log('[GistManager] API Request:', method, endpoint);
-        const response = await fetch(`${API_BASE}${endpoint}`, options);
+        // Retry logic for transient failures
+        const maxAttempts = 3;
+        let attempt = 0;
+        let lastError;
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            console.error('[GistManager] API Error:', response.status, error);
-            throw new Error(error.message || `HTTP ${response.status}`);
+        while (attempt < maxAttempts) {
+            attempt++;
+            try {
+                console.log('[GistManager] API Request:', method, endpoint, 'attempt', attempt);
+                const response = await fetch(`${API_BASE}${endpoint}`, optionsBase);
+
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({}));
+                    console.error('[GistManager] API Error:', response.status, errorBody);
+                    // Retry on 5xx server errors
+                    if (response.status >= 500 && attempt < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 200 * attempt));
+                        continue;
+                    }
+                    throw new Error(errorBody.message || `HTTP ${response.status}`);
+                }
+
+                // Attempt to parse JSON; some endpoints may return empty
+                const text = await response.text();
+                try { return text ? JSON.parse(text) : {}; } catch (e) { return {}; }
+            } catch (err) {
+                lastError = err;
+                console.warn('[GistManager] Request failed, retrying...', err);
+                if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 200 * attempt));
+            }
         }
 
-        return response.json();
+        throw lastError || new Error('API request failed');
     }
 
     async function validateToken(newToken) {
@@ -198,18 +221,20 @@ const GistManager = (function() {
             return data;
         } catch (error) {
             console.error('[GistManager] Error reading notes:', error);
-            
-            // Try local cache
-            const cachedNotes = localStorage.getItem('notes_sync_local_notes');
-            const cachedFiles = localStorage.getItem('notes_sync_local_files');
-            
-            if (cachedNotes || cachedFiles) {
-                return {
-                    version: '2.0',
-                    lastSync: new Date().toISOString(),
-                    notes: cachedNotes ? JSON.parse(cachedNotes) : [],
-                    files: cachedFiles ? JSON.parse(cachedFiles) : []
-                };
+            // Try unified local cache key
+            const cached = localStorage.getItem('notes_sync_local');
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    return {
+                        version: parsed.version || '2.0',
+                        lastSync: parsed.lastSync || new Date().toISOString(),
+                        notes: parsed.notes || [],
+                        files: parsed.files || []
+                    };
+                } catch (e) {
+                    console.warn('[GistManager] Failed parsing local cache', e);
+                }
             }
             throw error;
         }
@@ -218,10 +243,12 @@ const GistManager = (function() {
     async function writeNotes(data) {
         try {
             console.log('[GistManager] Writing notes...');
-            
-            // Save to local cache first
-            localStorage.setItem('notes_sync_local_notes', JSON.stringify(data.notes));
-            localStorage.setItem('notes_sync_local_files', JSON.stringify(data.files));
+            // Save unified local cache first (synchronous)
+            try {
+                localStorage.setItem('notes_sync_local', JSON.stringify({ version: '2.0', lastSync: new Date().toISOString(), notes: data.notes, files: data.files }));
+            } catch (e) {
+                console.warn('[GistManager] Could not save local cache', e);
+            }
 
             if (!gistId) {
                 console.log('[GistManager] No Gist ID, creating...');
@@ -237,10 +264,42 @@ const GistManager = (function() {
                     }
                 }
             });
+
             console.log('[GistManager] Write successful!');
         } catch (error) {
             console.error('[GistManager] Error writing notes:', error);
             throw error;
+        }
+    }
+
+    // Write notes attempting a keepalive fetch for unload scenarios
+    async function writeNotesKeepalive(data) {
+        if (!gistId || !token) return;
+        try {
+            const endpoint = `${API_BASE}/gists/${gistId}`;
+            const body = JSON.stringify({ description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { content: JSON.stringify(data, null, 2) } } });
+            // Try navigator.sendBeacon (may not include headers reliably), best-effort
+            if (navigator && typeof navigator.sendBeacon === 'function') {
+                navigator.sendBeacon(endpoint, body);
+                return;
+            }
+        } catch (e) {
+            // continue to fetch fallback
+        }
+
+        try {
+            await fetch(`${API_BASE}/gists/${gistId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { content: JSON.stringify(data, null, 2) } } }),
+                keepalive: true
+            });
+        } catch (err) {
+            console.warn('[GistManager] keepalive write failed', err);
         }
     }
 
@@ -267,6 +326,7 @@ const GistManager = (function() {
         getOrCreateGist,
         readNotes,
         writeNotes,
+        writeNotesKeepalive,
         deleteGist
     };
 })();
