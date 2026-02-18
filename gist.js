@@ -284,7 +284,6 @@ const GistManager = (function() {
             });
 
             console.log('[GistManager] Write successful!');
-            alert("Actualizado"); 
         } catch (error) {
             console.error('[GistManager] Error writing notes:', error);
             throw error;
@@ -351,4 +350,5 @@ const GistManager = (function() {
 })();
 
 window.GistManager = GistManager;
+
 
