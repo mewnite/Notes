@@ -1,95 +1,103 @@
 /**
  * Notes Sync - Main Application Logic
- * Enhanced with file upload/download support
+ * 
+ * Architecture:
+ * - State management with immediate local persistence
+ * - Save queue to handle rapid typing without race conditions
+ * - Separated concerns: UI, Data, Sync
  */
 
 (function() {
     'use strict';
 
-    // ====================
-    // State
-    // ====================
+    // ========================================
+    // CONFIGURATION
+    // ========================================
+    const CONFIG = {
+        AUTO_SAVE_DELAY: 500,        // Faster auto-save (0.5s)
+        SYNC_DEBOUNCE: 1000,         // Sync to GitHub after 1s of inactivity
+        MAX_FILE_SIZE: 5 * 1024 * 1024  // 5MB max file size
+    };
+
+    // ========================================
+    // STATE
+    // ========================================
     const state = {
         notes: [],
         files: [],
         currentNote: null,
-        filter: {
-            subject: 'all',
-            search: '',
-            sort: 'modifiedAt'
-        },
+        filter: { subject: 'all', search: '', sort: 'modifiedAt' },
         subjects: [],
-        isSyncing: false,
-        isSaving: false,
-        autoSaveTimeout: null
+        saveQueue: [],       // Queue for pending saves
+        isSaving: false,     // Currently syncing
+        lastSaveTime: 0      // Last successful save timestamp
     };
 
-    // ====================
-    // DOM Elements
-    // ====================
-    const elements = {
-        app: document.getElementById('app'),
-        sidebar: document.getElementById('sidebar'),
-        notesView: document.getElementById('notesView'),
-        editorView: document.getElementById('editorView'),
+    // ========================================
+    // DOM ELEMENTS
+    // ========================================
+    const elements = {};
+
+    function initElements() {
+        // Main views
+        elements.app = document.getElementById('app');
+        elements.sidebar = document.getElementById('sidebar');
+        elements.notesView = document.getElementById('notesView');
+        elements.editorView = document.getElementById('editorView');
         
         // Sidebar
-        sidebarToggle: document.getElementById('sidebarToggle'),
-        newNoteBtn: document.getElementById('newNoteBtn'),
-        searchInput: document.getElementById('searchInput'),
-        subjectList: document.getElementById('subjectList'),
-        filesList: document.getElementById('filesList'),
-        totalCount: document.getElementById('totalCount'),
-        syncStatus: document.getElementById('syncStatus'),
-        syncBtn: document.getElementById('syncBtn'),
-        settingsBtn: document.getElementById('settingsBtn'),
-        fileInput: document.getElementById('fileInput'),
+        elements.sidebarToggle = document.getElementById('sidebarToggle');
+        elements.newNoteBtn = document.getElementById('newNoteBtn');
+        elements.searchInput = document.getElementById('searchInput');
+        elements.subjectList = document.getElementById('subjectList');
+        elements.filesList = document.getElementById('filesList');
+        elements.totalCount = document.getElementById('totalCount');
+        elements.syncStatus = document.getElementById('syncStatus');
+        elements.syncBtn = document.getElementById('syncBtn');
+        elements.settingsBtn = document.getElementById('settingsBtn');
+        elements.fileInput = document.getElementById('fileInput');
         
-        // Notes List
-        notesGrid: document.getElementById('notesGrid'),
-        notesCount: document.getElementById('notesCount'),
-        emptyState: document.getElementById('emptyState'),
-        loadingState: document.getElementById('loadingState'),
-        sortSelect: document.getElementById('sortSelect'),
+        // Notes list
+        elements.notesGrid = document.getElementById('notesGrid');
+        elements.notesCount = document.getElementById('notesCount');
+        elements.emptyState = document.getElementById('emptyState');
+        elements.loadingState = document.getElementById('loadingState');
+        elements.sortSelect = document.getElementById('sortSelect');
         
         // Editor
-        backBtn: document.getElementById('backBtn'),
-        saveNoteBtn: document.getElementById('saveNoteBtn'),
-        deleteNoteBtn: document.getElementById('deleteNoteBtn'),
-        saveStatus: document.getElementById('saveStatus'),
-        noteTitle: document.getElementById('noteTitle'),
-        noteSubject: document.getElementById('noteSubject'),
-        noteTags: document.getElementById('noteTags'),
-        noteContent: document.getElementById('noteContent'),
-        subjectsList: document.getElementById('subjectsList'),
-        wordCount: document.getElementById('wordCount'),
-        charCount: document.getElementById('charCount'),
+        elements.backBtn = document.getElementById('backBtn');
+        elements.saveNoteBtn = document.getElementById('saveNoteBtn');
+        elements.deleteNoteBtn = document.getElementById('deleteNoteBtn');
+        elements.saveStatus = document.getElementById('saveStatus');
+        elements.noteTitle = document.getElementById('noteTitle');
+        elements.noteSubject = document.getElementById('noteSubject');
+        elements.noteTags = document.getElementById('noteTags');
+        elements.noteContent = document.getElementById('noteContent');
+        elements.subjectsList = document.getElementById('subjectsList');
+        elements.wordCount = document.getElementById('wordCount');
+        elements.charCount = document.getElementById('charCount');
         
         // Modals
-        authModal: document.getElementById('authModal'),
-        closeAuthModal: document.getElementById('closeAuthModal'),
-        githubToken: document.getElementById('githubToken'),
-        authError: document.getElementById('authError'),
-        authErrorText: document.getElementById('authErrorText'),
-        connectBtn: document.getElementById('connectBtn'),
-        
-        deleteModal: document.getElementById('deleteModal'),
-        closeDeleteModal: document.getElementById('closeDeleteModal'),
-        cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
-        confirmDeleteBtn: document.getElementById('confirmDeleteBtn'),
-        
-        // Toast
-        toastContainer: document.getElementById('toastContainer')
-    };
+        elements.authModal = document.getElementById('authModal');
+        elements.closeAuthModal = document.getElementById('closeAuthModal');
+        elements.githubToken = document.getElementById('githubToken');
+        elements.authError = document.getElementById('authError');
+        elements.authErrorText = document.getElementById('authErrorText');
+        elements.connectBtn = document.getElementById('connectBtn');
+        elements.deleteModal = document.getElementById('deleteModal');
+        elements.closeDeleteModal = document.getElementById('closeDeleteModal');
+        elements.cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+        elements.confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        elements.toastContainer = document.getElementById('toastContainer');
+    }
 
-    // ====================
-    // Utilities
-    // ====================
+    // ========================================
+    // UTILITIES
+    // ========================================
     function generateId() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
             const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
     }
 
@@ -98,15 +106,9 @@
         const now = new Date();
         const diff = now - date;
         
-        if (diff < 60000) return 'Hace un momento';
-        if (diff < 3600000) {
-            const minutes = Math.floor(diff / 60000);
-            return `Hace ${minutes}m`;
-        }
-        if (diff < 86400000) {
-            const hours = Math.floor(diff / 3600000);
-            return `Hace ${hours}h`;
-        }
+        if (diff < 60000) return 'Ahora';
+        if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)}m`;
+        if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)}h`;
         if (date.getFullYear() === now.getFullYear()) {
             return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
         }
@@ -117,19 +119,14 @@
         if (bytes === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        return parseFloat((bytes / Math.pow(k, Math.floor(bytes / k !== 0 ? Math.log(bytes) / Math.log(k) : 0))).toFixed(1)) + ' ' + sizes[Math.floor(Math.log(bytes) / Math.log(k))];
     }
 
     function debounce(func, wait) {
         let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
+        return function(...args) {
             clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
+            timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
 
@@ -139,62 +136,132 @@
         return div.innerHTML;
     }
 
-    // ====================
-    // Toast Notifications
-    // ====================
+    // ========================================
+    // TOAST NOTIFICATIONS
+    // ========================================
     function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
         const icons = {
             success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
             error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
             info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
         };
         
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
         toast.innerHTML = `${icons[type]}<span>${message}</span>`;
         elements.toastContainer.appendChild(toast);
         
         setTimeout(() => {
-            toast.style.animation = 'slideIn 200ms ease-out reverse';
+            toast.style.opacity = '0';
             setTimeout(() => toast.remove(), 200);
-        }, 3500);
+        }, 3000);
     }
 
-    // ====================
-    // Data Management
-    // ====================
-    async function loadNotes() {
+    // ========================================
+    // DATA LAYER - Immediate local persistence
+    // ========================================
+    
+    // Save to localStorage IMMEDIATELY (for offline support)
+    function saveToLocalCache() {
         try {
-            showLoading(true);
-            updateSyncStatus('syncing');
+            localStorage.setItem('notes_sync_local', JSON.stringify({
+                notes: state.notes,
+                files: state.files,
+                lastSync: new Date().toISOString()
+            }));
+        } catch (e) {
+            console.error('Local cache save failed:', e);
+        }
+    }
+
+    // Load from local cache
+    function loadFromLocalCache() {
+        try {
+            const cached = localStorage.getItem('notes_sync_local');
+            if (cached) {
+                const data = JSON.parse(cached);
+                state.notes = data.notes || [];
+                state.files = data.files || [];
+                return true;
+            }
+        } catch (e) {
+            console.error('Local cache load failed:', e);
+        }
+        return false;
+    }
+
+    // Sync to GitHub - handles queue
+    async function syncToGitHub() {
+        if (state.isSaving) return;
+        
+        state.isSaving = true;
+        updateSaveStatus('saving');
+        
+        try {
+            const data = {
+                version: '2.0',
+                lastSync: new Date().toISOString(),
+                notes: state.notes,
+                files: state.files
+            };
             
+            await GistManager.writeNotes(data);
+            state.lastSaveTime = Date.now();
+            updateSaveStatus('saved');
+            
+            // Update local cache after successful sync
+            saveToLocalCache();
+            
+        } catch (error) {
+            console.error('Sync failed:', error);
+            updateSaveStatus('error');
+            showToast('Error al guardar en GitHub', 'error');
+        } finally {
+            state.isSaving = false;
+        }
+    }
+
+    // Queue-based save (for rapid typing)
+    let saveTimeout = null;
+    function queueSave() {
+        // Save to local cache immediately
+        saveToLocalCache();
+        
+        // Debounce GitHub sync
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            syncToGitHub();
+        }, CONFIG.SYNC_DEBOUNCE);
+    }
+
+    // ========================================
+    // DATA OPERATIONS
+    // ========================================
+    async function loadNotes() {
+        showLoading(true);
+        updateSyncStatus('syncing');
+        
+        try {
             const data = await GistManager.readNotes();
             state.notes = data.notes || [];
             state.files = data.files || [];
             
-            localStorage.setItem('notes_sync_local_notes', JSON.stringify(state.notes));
-            localStorage.setItem('notes_sync_local_files', JSON.stringify(state.files));
+            // Update local cache
+            saveToLocalCache();
             
             updateSyncStatus('synced');
-            showToast('Sincronizado correctamente', 'success');
+            showToast('Notas cargadas', 'success');
         } catch (error) {
-            console.error('Error loading notes:', error);
+            console.error('Load error:', error);
             
-            const cachedNotes = localStorage.getItem('notes_sync_local_notes');
-            const cachedFiles = localStorage.getItem('notes_sync_local_files');
-            
-            if (cachedNotes) state.notes = JSON.parse(cachedNotes);
-            if (cachedFiles) state.files = JSON.parse(cachedFiles);
-            
-            if (cachedNotes || cachedFiles) {
-                updateSyncStatus('error');
-                showToast('Sin conexión - modo offline', 'info');
-            } else {
+            // Try local cache
+            if (!loadFromLocalCache()) {
                 state.notes = [];
                 state.files = [];
-                showToast('Error al cargar datos', 'error');
             }
+            
+            updateSyncStatus('error');
+            showToast('Sin conexión - modo offline', 'info');
         } finally {
             showLoading(false);
             extractSubjects();
@@ -204,37 +271,51 @@
         }
     }
 
-    async function saveNotes() {
-        if (state.isSaving) return;
+    async function saveCurrentNote() {
+        if (!state.currentNote) return;
         
-        try {
-            state.isSaving = true;
-            updateSaveStatus('saving');
-            
-            const data = {
-                version: '2.0',
-                lastSync: new Date().toISOString(),
-                notes: state.notes,
-                files: state.files
-            };
-            
-            await GistManager.writeNotes(data);
-            
-            updateSaveStatus('saved');
-            localStorage.setItem('notes_sync_local_notes', JSON.stringify(state.notes));
-            localStorage.setItem('notes_sync_local_files', JSON.stringify(state.files));
-            
-            setTimeout(() => updateSaveStatus(''), 2000);
-        } catch (error) {
-            console.error('Error saving notes:', error);
-            updateSaveStatus('error');
-            showToast('Error al guardar', 'error');
-        } finally {
-            state.isSaving = false;
+        // Update note data from form
+        state.currentNote.title = elements.noteTitle.value.trim();
+        state.currentNote.subject = elements.noteSubject.value.trim();
+        state.currentNote.content = elements.noteContent.value;
+        
+        const tagsStr = elements.noteTags.value;
+        state.currentNote.tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+        state.currentNote.modifiedAt = new Date().toISOString();
+        
+        // Check if note exists in array
+        const existingIndex = state.notes.findIndex(n => n.id === state.currentNote.id);
+        if (existingIndex === -1) {
+            state.notes.unshift(state.currentNote);
         }
+        
+        updateWordCount();
+        
+        // Immediate local save + queued sync
+        queueSave();
     }
 
-    const debouncedSave = debounce(saveNotes, 1000);
+    async function deleteNote(noteId) {
+        const index = state.notes.findIndex(n => n.id === noteId);
+        if (index === -1) {
+            console.error('Note not found:', noteId);
+            showToast('Nota no encontrada', 'error');
+            return;
+        }
+        
+        const noteTitle = state.notes[index].title || 'Nota';
+        
+        // Remove from array
+        state.notes.splice(index, 1);
+        
+        // Immediately save to local cache and queue sync
+        saveToLocalCache();
+        
+        // Force immediate sync
+        await syncToGitHub();
+        
+        showToast('Nota eliminada', 'success');
+    }
 
     function extractSubjects() {
         const subjects = new Set();
@@ -250,58 +331,57 @@
         let filtered = [...state.notes];
         
         if (state.filter.subject !== 'all') {
-            filtered = filtered.filter(note => note.subject === state.filter.subject);
+            filtered = filtered.filter(n => n.subject === state.filter.subject);
         }
         
         if (state.filter.search) {
             const search = state.filter.search.toLowerCase();
-            filtered = filtered.filter(note =>
-                note.title.toLowerCase().includes(search) ||
-                note.content.toLowerCase().includes(search) ||
-                (note.tags && note.tags.some(tag => tag.toLowerCase().includes(search)))
+            filtered = filtered.filter(n =>
+                (n.title || '').toLowerCase().includes(search) ||
+                (n.content || '').toLowerCase().includes(search) ||
+                (n.tags || []).some(t => t.toLowerCase().includes(search))
             );
         }
         
-        filtered.sort((a, b) => {
-            switch (state.filter.sort) {
-                case 'title': return a.title.localeCompare(b.title);
-                case 'subject': return (a.subject || '').localeCompare(b.subject || '');
-                case 'createdAt': return new Date(b.createdAt) - new Date(a.createdAt);
-                case 'modifiedAt': default: return new Date(b.modifiedAt) - new Date(a.modifiedAt);
-            }
-        });
+        filtered.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+        
+        if (state.filter.sort === 'title') filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        if (state.filter.sort === 'subject') filtered.sort((a, b) => (a.subject || '').localeCompare(b.subject || ''));
+        if (state.filter.sort === 'createdAt') filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
         return filtered;
     }
 
-    // ====================
-    // File Handling
-    // ====================
+    // ========================================
+    // FILE HANDLING
+    // ========================================
     async function handleFileUpload(event) {
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
         for (const file of files) {
+            if (file.size > CONFIG.MAX_FILE_SIZE) {
+                showToast(`${file.name} es muy grande (max 5MB)`, 'error');
+                continue;
+            }
+            
             try {
                 const content = await readFileContent(file);
-                const fileData = {
+                state.files.push({
                     id: generateId(),
                     name: file.name,
                     type: file.type,
                     size: file.size,
                     content: content,
                     uploadedAt: new Date().toISOString()
-                };
-                
-                state.files.push(fileData);
-                showToast(`${file.name} subido correctamente`, 'success');
+                });
+                showToast(`${file.name} subido`, 'success');
             } catch (error) {
-                console.error('Error uploading file:', error);
                 showToast(`Error al subir ${file.name}`, 'error');
             }
         }
         
-        debouncedSave();
+        queueSave();
         renderFiles();
         event.target.value = '';
     }
@@ -309,14 +389,11 @@
     function readFileContent(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            
             if (file.type === 'application/pdf') {
-                // For PDFs, store as base64
                 reader.onload = () => resolve(reader.result);
                 reader.onerror = reject;
                 reader.readAsDataURL(file);
             } else {
-                // For text files
                 reader.onload = () => resolve(reader.result);
                 reader.onerror = reject;
                 reader.readAsText(file);
@@ -327,41 +404,16 @@
     function downloadFile(fileId) {
         const file = state.files.find(f => f.id === fileId);
         if (!file) return;
-
+        
         const blob = new Blob([file.content], { type: file.type });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = file.name;
-        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
         showToast(`Descargando ${file.name}`, 'info');
-    }
-
-    function exportNote(noteId) {
-        const note = state.notes.find(n => n.id === noteId);
-        if (!note) return;
-
-        const content = `# ${note.title || 'Sin título'}
-${note.subject ? `**Materia:** ${note.subject}\n` : ''}${note.tags && note.tags.length ? `**Etiquetas:** ${note.tags.join(', ')}\n` : ''}
----
-
-${note.content || ''}`;
-
-        const blob = new Blob([content], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${note.title || 'nota'}.md`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        showToast(`Exportando ${note.title || 'nota'}`, 'info');
     }
 
     function deleteFile(fileId) {
@@ -369,43 +421,36 @@ ${note.content || ''}`;
         if (index > -1) {
             const fileName = state.files[index].name;
             state.files.splice(index, 1);
-            debouncedSave();
+            queueSave();
             renderFiles();
             showToast(`${fileName} eliminado`, 'success');
         }
     }
 
-    // ====================
-    // UI Updates
-    // ====================
+    // ========================================
+    // UI RENDERING
+    // ========================================
     function showLoading(show) {
         elements.loadingState.classList.toggle('visible', show);
     }
 
     function showEmptyState(show) {
-        elements.emptyState.classList.toggle('visible', show && state.notes.length === 0 && state.files.length === 0);
+        elements.emptyState.classList.toggle('visible', show && state.notes.length === 0);
     }
 
     function updateSyncStatus(status) {
         elements.syncStatus.className = 'sync-status ' + status;
-        const texts = {
-            '': 'Listo',
-            syncing: 'Sincronizando...',
-            synced: 'Sincronizado',
-            error: 'Sin conexión'
-        };
-        elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || texts[''];
+        const texts = { syncing: 'Sincronizando...', synced: 'Sincronizado', error: 'Sin conexión' };
+        elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
     }
 
     function updateSaveStatus(status) {
         elements.saveStatus.className = 'save-status ' + status;
-        const texts = { '': '', saving: 'Guardando...', saved: 'Guardado', error: 'Error' };
-        elements.saveStatus.textContent = texts[status] || '';
+        elements.saveStatus.textContent = status === 'saved' ? '✓ Guardado' : status === 'saving' ? 'Guardando...' : status === 'error' ? 'Error' : '';
     }
 
     function renderNotes() {
         const filtered = getFilteredNotes();
-        
         elements.notesCount.textContent = `${state.notes.length} nota${state.notes.length !== 1 ? 's' : ''}`;
         
         if (filtered.length === 0 && state.notes.length === 0) {
@@ -440,33 +485,21 @@ ${note.content || ''}`;
     }
 
     function renderSubjects() {
-        const subjectCounts = {};
-        state.notes.forEach(note => {
-            if (note.subject) subjectCounts[note.subject] = (subjectCounts[note.subject] || 0) + 1;
-        });
+        const counts = {};
+        state.notes.forEach(n => { if (n.subject) counts[n.subject] = (counts[n.subject] || 0) + 1; });
         
-        let html = `
-            <li class="subject-item ${state.filter.subject === 'all' ? 'active' : ''}" data-subject="all">
-                <span class="subject-dot"></span>
-                <span class="subject-name">Todas</span>
-                <span class="subject-count">${state.notes.length}</span>
-            </li>
-        `;
+        let html = `<li class="subject-item ${state.filter.subject === 'all' ? 'active' : ''}" data-subject="all">
+            <span class="subject-dot"></span><span class="subject-name">Todas</span>
+            <span class="subject-count">${state.notes.length}</span></li>`;
         
-        state.subjects.forEach(subject => {
-            html += `
-                <li class="subject-item ${state.filter.subject === subject ? 'active' : ''}" data-subject="${escapeHtml(subject)}">
-                    <span class="subject-dot"></span>
-                    <span class="subject-name">${escapeHtml(subject)}</span>
-                    <span class="subject-count">${subjectCounts[subject] || 0}</span>
-                </li>
-            `;
+        state.subjects.forEach(s => {
+            html += `<li class="subject-item ${state.filter.subject === s ? 'active' : ''}" data-subject="${escapeHtml(s)}">
+                <span class="subject-dot"></span><span class="subject-name">${escapeHtml(s)}</span>
+                <span class="subject-count">${counts[s] || 0}</span></li>`;
         });
         
         elements.subjectList.innerHTML = html;
         elements.totalCount.textContent = state.notes.length;
-        
-        // Update datalist for subject autocomplete
         if (elements.subjectsList) {
             elements.subjectsList.innerHTML = state.subjects.map(s => `<option value="${escapeHtml(s)}">`).join('');
         }
@@ -483,18 +516,18 @@ ${note.content || ''}`;
 
     function renderFiles() {
         if (state.files.length === 0) {
-            elements.filesList.innerHTML = '<li style="padding: 12px; color: var(--text-muted); font-size: 13px;">No hay archivos</li>';
+            elements.filesList.innerHTML = '<li style="padding:12px;color:var(--text-muted);font-size:13px">No hay archivos</li>';
             return;
         }
         
-        const filesHtml = state.files.map(file => {
-            const isPdf = file.type === 'application/pdf';
-            const iconSvg = isPdf 
-                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'
-                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
-            
-            return `<li class="file-item" data-id="${file.id}" title="${escapeHtml(file.name)}">
-                <div class="file-icon ${isPdf ? 'pdf' : ''}">${iconSvg}</div>
+        elements.filesList.innerHTML = state.files.map(file => `
+            <li class="file-item" data-id="${file.id}">
+                <div class="file-icon ${file.type === 'application/pdf' ? 'pdf' : ''}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                </div>
                 <div class="file-info">
                     <div class="file-name">${escapeHtml(file.name)}</div>
                     <div class="file-size">${formatFileSize(file.size)}</div>
@@ -506,30 +539,22 @@ ${note.content || ''}`;
                         <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                 </button>
-            </li>`;
-        }).join('');
-        
-        elements.filesList.innerHTML = filesHtml;
+            </li>
+        `).join('');
     }
 
-    // ====================
-    // Note Operations
-    // ====================
+    // ========================================
+    // NOTE OPERATIONS
+    // ========================================
     function createNewNote() {
         const now = new Date().toISOString();
-        
         state.currentNote = {
             id: generateId(),
-            title: '',
-            subject: '',
-            tags: [],
-            content: '',
-            createdAt: now,
-            modifiedAt: now
+            title: '', subject: '', tags: [], content: '',
+            createdAt: now, modifiedAt: now
         };
         
         state.notes.unshift(state.currentNote);
-        
         openEditor();
         renderNotes();
         renderSubjects();
@@ -547,96 +572,61 @@ ${note.content || ''}`;
         elements.notesView.classList.add('hidden');
         elements.editorView.classList.remove('hidden');
         
-        elements.noteTitle.value = state.currentNote.title || '';
-        elements.noteSubject.value = state.currentNote.subject || '';
-        elements.noteTags.value = (state.currentNote.tags || []).join(', ');
-        elements.noteContent.value = state.currentNote.content || '';
+        elements.noteTitle.value = state.currentNote?.title || '';
+        elements.noteSubject.value = state.currentNote?.subject || '';
+        elements.noteTags.value = (state.currentNote?.tags || []).join(', ');
+        elements.noteContent.value = state.currentNote?.content || '';
         
         updateWordCount();
         elements.noteTitle.focus();
     }
 
     function closeEditor() {
+        // Save before closing
+        if (state.currentNote) {
+            saveCurrentNote();
+        }
+        
         elements.editorView.classList.add('hidden');
         elements.notesView.classList.remove('hidden');
         state.currentNote = null;
-    }
-
-    function updateCurrentNote() {
-        if (!state.currentNote) return;
         
-        state.currentNote.title = elements.noteTitle.value.trim();
-        state.currentNote.subject = elements.noteSubject.value.trim();
-        state.currentNote.content = elements.noteContent.value;
-        
-        const tagsStr = elements.noteTags.value;
-        state.currentNote.tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
-        
-        state.currentNote.modifiedAt = new Date().toISOString();
-        
-        updateWordCount();
-        debouncedSave();
+        renderNotes();
     }
 
     function updateWordCount() {
         const content = elements.noteContent.value;
         const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-        const chars = content.length;
-        
         elements.wordCount.textContent = `${words} palabra${words !== 1 ? 's' : ''}`;
-        elements.charCount.textContent = `${chars} caracter${chars !== 1 ? 'es' : ''}`;
+        elements.charCount.textContent = `${content.length} caracter${content.length !== 1 ? 'es' : ''}`;
     }
 
-    function deleteCurrentNote() {
-        if (!state.currentNote) return;
+    function exportNote(noteId) {
+        const note = state.notes.find(n => n.id === noteId);
+        if (!note) return;
         
-        const index = state.notes.findIndex(n => n.id === state.currentNote.id);
-        if (index > -1) {
-            state.notes.splice(index, 1);
-            saveNotes();
-            closeEditor();
-            renderNotes();
-            renderSubjects();
-            showToast('Nota eliminada', 'success');
-        }
+        const content = `# ${note.title || 'Sin título'}\n${note.subject ? `**Materia:** ${note.subject}\n` : ''}${note.tags?.length ? `**Etiquetas:** ${note.tags.join(', ')}\n` : ''}\n---\n\n${note.content || ''}`;
+        
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${note.title || 'nota'}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
-    // ====================
-    // Event Handlers
-    // ====================
+    // ========================================
+    // EVENT HANDLERS
+    // ========================================
     function setupEventListeners() {
-        // Sidebar toggle - works for both mobile (drawer) and desktop (collapse)
+        // Sidebar toggle
         elements.sidebarToggle.addEventListener('click', () => {
             const isMobile = window.innerWidth <= 900;
-            
-            if (isMobile) {
-                // Mobile: open/close drawer
-                elements.sidebar.classList.toggle('open');
-            } else {
-                // Desktop: collapse/expand
-                elements.sidebar.classList.toggle('collapsed');
-                elements.app.classList.toggle('sidebar-collapsed');
-            }
+            if (isMobile) elements.sidebar.classList.toggle('open');
+            else elements.sidebar.classList.toggle('collapsed');
         });
-        
-        // Close mobile sidebar when clicking outside
-        document.addEventListener('click', (e) => {
-            const isMobile = window.innerWidth <= 900;
-            if (isMobile && elements.sidebar.classList.contains('open')) {
-                if (!elements.sidebar.contains(e.target) && !elements.sidebarToggle.contains(e.target)) {
-                    elements.sidebar.classList.remove('open');
-                }
-            }
-        });
-        
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            const isMobile = window.innerWidth <= 900;
-            if (!isMobile) {
-                elements.sidebar.classList.remove('open');
-            }
-        });
-        
+
         // New note
         elements.newNoteBtn.addEventListener('click', createNewNote);
         
@@ -645,122 +635,78 @@ ${note.content || ''}`;
         
         // Drag and drop
         const uploadZone = document.getElementById('uploadZone');
-        uploadZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--accent-primary)';
-        });
-        uploadZone.addEventListener('dragleave', () => {
-            uploadZone.style.borderColor = '';
-        });
-        uploadZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = '';
-            elements.fileInput.files = e.dataTransfer.files;
-            handleFileUpload({ target: elements.fileInput });
-        });
+        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent-primary)'; });
+        uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.borderColor = ''; elements.fileInput.files = e.dataTransfer.files; handleFileUpload({ target: elements.fileInput }); });
         
         // Search
-        elements.searchInput.addEventListener('input', debounce((e) => {
-            state.filter.search = e.target.value;
-            renderNotes();
-        }, 300));
+        elements.searchInput.addEventListener('input', debounce(e => { state.filter.search = e.target.value; renderNotes(); }, 300));
         
         // Sort
-        elements.sortSelect.addEventListener('change', (e) => {
-            state.filter.sort = e.target.value;
-            renderNotes();
-        });
+        elements.sortSelect.addEventListener('change', e => { state.filter.sort = e.target.value; renderNotes(); });
         
-        // Editor inputs
-        elements.noteTitle.addEventListener('input', updateCurrentNote);
-        elements.noteSubject.addEventListener('input', updateCurrentNote);
-        elements.noteTags.addEventListener('input', updateCurrentNote);
-        elements.noteContent.addEventListener('input', updateCurrentNote);
-        
-        // Editor navigation
-        elements.backBtn.addEventListener('click', () => {
-            closeEditor();
-            renderNotes();
-        });
+        // Editor - immediate save on input (no debounce for local, debounce for sync)
+        elements.noteTitle.addEventListener('input', saveCurrentNote);
+        elements.noteSubject.addEventListener('input', saveCurrentNote);
+        elements.noteTags.addEventListener('input', saveCurrentNote);
+        elements.noteContent.addEventListener('input', saveCurrentNote);
         
         // Manual save button
         elements.saveNoteBtn.addEventListener('click', () => {
+            saveCurrentNote();
+            syncToGitHub();
+            showToast('Nota guardada', 'success');
+        });
+        
+        // Navigation
+        elements.backBtn.addEventListener('click', closeEditor);
+        
+        // Delete
+        elements.deleteNoteBtn.addEventListener('click', () => elements.deleteModal.classList.remove('hidden'));
+        elements.closeDeleteModal.addEventListener('click', () => elements.deleteModal.classList.add('hidden'));
+        elements.cancelDeleteBtn.addEventListener('click', () => elements.deleteModal.classList.add('hidden'));
+        elements.confirmDeleteBtn.addEventListener('click', () => {
+            elements.deleteModal.classList.add('hidden');
             if (state.currentNote) {
-                updateCurrentNote();
-                saveNotes();
-                showToast('Nota guardada', 'success');
+                const noteId = state.currentNote.id;
+                closeEditor();
+                deleteNote(noteId);
             }
         });
         
-        // Delete note
-        elements.deleteNoteBtn.addEventListener('click', () => {
-            elements.deleteModal.classList.remove('hidden');
-        });
-        
-        elements.closeDeleteModal.addEventListener('click', () => {
-            elements.deleteModal.classList.add('hidden');
-        });
-        
-        elements.cancelDeleteBtn.addEventListener('click', () => {
-            elements.deleteModal.classList.add('hidden');
-        });
-        
-        elements.confirmDeleteBtn.addEventListener('click', () => {
-            elements.deleteModal.classList.add('hidden');
-            deleteCurrentNote();
-        });
-        
         // Sync
-        elements.syncBtn.addEventListener('click', loadNotes);
+        elements.syncBtn.addEventListener('click', () => { syncToGitHub(); loadNotes(); });
         
-        // Settings - Account
+        // Settings - logout
         elements.settingsBtn.addEventListener('click', () => {
-            if (confirm('¿Cerrar sesión de GitHub?')) {
+            if (confirm('¿Cerrar sesión?')) {
                 GistManager.logout();
-                localStorage.removeItem('notes_sync_local_notes');
-                localStorage.removeItem('notes_sync_local_files');
-                showAuthModal();
+                localStorage.removeItem('notes_sync_local');
+                elements.authModal.classList.remove('hidden');
             }
         });
         
         // Auth modal
-        elements.closeAuthModal.addEventListener('click', () => {
-            elements.authModal.classList.add('hidden');
-        });
-        
+        elements.closeAuthModal.addEventListener('click', () => elements.authModal.classList.add('hidden'));
         elements.connectBtn.addEventListener('click', handleAuth);
-        
-        // Click outside modals
-        elements.authModal.addEventListener('click', (e) => {
-            if (e.target === elements.authModal) elements.authModal.classList.add('hidden');
-        });
-        
-        elements.deleteModal.addEventListener('click', (e) => {
-            if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden');
-        });
+        elements.authModal.addEventListener('click', e => { if (e.target === elements.authModal) elements.authModal.classList.add('hidden'); });
+        elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
         // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-                e.preventDefault();
-                if (!elements.editorView.classList.contains('hidden')) return;
-                createNewNote();
-            }
-            
-            if (e.key === 'Escape' && !elements.editorView.classList.contains('hidden')) {
-                closeEditor();
-                renderNotes();
-            }
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
+            if (e.key === 'Escape' && !elements.editorView.classList.contains('hidden')) closeEditor();
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 900) elements.sidebar.classList.remove('open');
         });
     }
 
     async function handleAuth() {
         const token = elements.githubToken.value.trim();
-        
-        if (!token) {
-            showAuthError('Por favor ingresa un token');
-            return;
-        }
+        if (!token) { showAuthError('Ingresa un token'); return; }
         
         elements.connectBtn.disabled = true;
         elements.connectBtn.textContent = 'Validando...';
@@ -768,11 +714,9 @@ ${note.content || ''}`;
         try {
             await GistManager.validateToken(token);
             GistManager.setToken(token);
-            
             elements.authModal.classList.add('hidden');
             elements.githubToken.value = '';
             elements.authError.classList.add('hidden');
-            
             showToast('Conectado a GitHub', 'success');
             await loadNotes();
         } catch (error) {
@@ -783,29 +727,25 @@ ${note.content || ''}`;
         }
     }
 
-    function showAuthError(message) {
+    function showAuthError(msg) {
         elements.authError.classList.remove('hidden');
-        elements.authErrorText.textContent = message;
+        elements.authErrorText.textContent = msg;
     }
 
-    function showAuthModal() {
-        elements.authModal.classList.remove('hidden');
-        elements.githubToken.focus();
-    }
-
-    // ====================
-    // Initialization
-    // ====================
+    // ========================================
+    // INITIALIZATION
+    // ========================================
     async function init() {
+        initElements();
         GistManager.init();
         setupEventListeners();
         
-        // Make functions globally available
+        // Make functions global for onclick handlers
         window.downloadFile = downloadFile;
         window.exportNote = exportNote;
         
         if (!GistManager.isAuthenticated()) {
-            showAuthModal();
+            elements.authModal.classList.remove('hidden');
             return;
         }
         
