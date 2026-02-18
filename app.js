@@ -164,20 +164,24 @@
     // Save to localStorage IMMEDIATELY (for offline support)
     function saveToLocalCache() {
         try {
-            localStorage.setItem('notes_sync_local', JSON.stringify({
-                notes: state.notes,
-                files: state.files,
-                lastSync: new Date().toISOString()
-            }));
+            const payload = JSON.stringify({ notes: state.notes, files: state.files, lastSync: new Date().toISOString(), version: '2.0' });
+            if (window.StorageAdapter) {
+                window.StorageAdapter.setItem('notes_sync_local', payload);
+            } else {
+                localStorage.setItem('notes_sync_local', payload);
+            }
         } catch (e) {
             console.error('Local cache save failed:', e);
         }
     }
 
     // Load from local cache
-    function loadFromLocalCache() {
+    async function loadFromLocalCache() {
         try {
-            const cached = localStorage.getItem('notes_sync_local');
+            let cached = null;
+            if (window.StorageAdapter) cached = await window.StorageAdapter.getItem('notes_sync_local');
+            else cached = localStorage.getItem('notes_sync_local');
+
             if (cached) {
                 const data = JSON.parse(cached);
                 state.notes = data.notes || [];
@@ -263,7 +267,7 @@
             console.error('Load error:', error);
             
             // Try local cache
-            if (!loadFromLocalCache()) {
+            if (!(await loadFromLocalCache())) {
                 state.notes = [];
                 state.files = [];
             }
@@ -690,7 +694,8 @@
         elements.settingsBtn.addEventListener('click', () => {
             if (confirm('¿Cerrar sesión?')) {
                 GistManager.logout();
-                localStorage.removeItem('notes_sync_local');
+                if (window.StorageAdapter) window.StorageAdapter.removeItem('notes_sync_local');
+                else localStorage.removeItem('notes_sync_local');
                 elements.authModal.classList.remove('hidden');
             }
         });
@@ -746,6 +751,10 @@
     // ========================================
     async function init() {
         initElements();
+        // Initialize storage adapter (IndexedDB) if available
+        if (window.StorageAdapter && typeof window.StorageAdapter.init === 'function') {
+            try { await window.StorageAdapter.init(); } catch (e) { console.warn('StorageAdapter init failed', e); }
+        }
         GistManager.init();
         setupEventListeners();
         

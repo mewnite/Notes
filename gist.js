@@ -221,19 +221,36 @@ const GistManager = (function() {
             return data;
         } catch (error) {
             console.error('[GistManager] Error reading notes:', error);
-            // Try unified local cache key
-            const cached = localStorage.getItem('notes_sync_local');
-            if (cached) {
-                try {
-                    const parsed = JSON.parse(cached);
-                    return {
-                        version: parsed.version || '2.0',
-                        lastSync: parsed.lastSync || new Date().toISOString(),
-                        notes: parsed.notes || [],
-                        files: parsed.files || []
-                    };
-                } catch (e) {
-                    console.warn('[GistManager] Failed parsing local cache', e);
+            // Try unified local cache key via StorageAdapter
+            if (window.StorageAdapter) {
+                const cached = await window.StorageAdapter.getItem('notes_sync_local');
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached);
+                        return {
+                            version: parsed.version || '2.0',
+                            lastSync: parsed.lastSync || new Date().toISOString(),
+                            notes: parsed.notes || [],
+                            files: parsed.files || []
+                        };
+                    } catch (e) {
+                        console.warn('[GistManager] Failed parsing local cache', e);
+                    }
+                }
+            } else {
+                const cached = localStorage.getItem('notes_sync_local');
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached);
+                        return {
+                            version: parsed.version || '2.0',
+                            lastSync: parsed.lastSync || new Date().toISOString(),
+                            notes: parsed.notes || [],
+                            files: parsed.files || []
+                        };
+                    } catch (e) {
+                        console.warn('[GistManager] Failed parsing local cache', e);
+                    }
                 }
             }
             throw error;
@@ -245,7 +262,8 @@ const GistManager = (function() {
             console.log('[GistManager] Writing notes...');
             // Save unified local cache first (synchronous)
             try {
-                localStorage.setItem('notes_sync_local', JSON.stringify({ version: '2.0', lastSync: new Date().toISOString(), notes: data.notes, files: data.files }));
+                if (window.StorageAdapter) await window.StorageAdapter.setItem('notes_sync_local', JSON.stringify({ version: '2.0', lastSync: new Date().toISOString(), notes: data.notes, files: data.files }));
+                else localStorage.setItem('notes_sync_local', JSON.stringify({ version: '2.0', lastSync: new Date().toISOString(), notes: data.notes, files: data.files }));
             } catch (e) {
                 console.warn('[GistManager] Could not save local cache', e);
             }
