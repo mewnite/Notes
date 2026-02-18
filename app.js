@@ -54,6 +54,7 @@
         
         // Editor
         backBtn: document.getElementById('backBtn'),
+        saveNoteBtn: document.getElementById('saveNoteBtn'),
         deleteNoteBtn: document.getElementById('deleteNoteBtn'),
         saveStatus: document.getElementById('saveStatus'),
         noteTitle: document.getElementById('noteTitle'),
@@ -680,6 +681,15 @@ ${note.content || ''}`;
         elements.backBtn.addEventListener('click', () => {
             closeEditor();
             renderNotes();
+        });
+        
+        // Manual save button
+        elements.saveNoteBtn.addEventListener('click', () => {
+            if (state.currentNote) {
+                updateCurrentNote();
+                saveNotes();
+                showToast('Nota guardada', 'success');
+            }
         });
         
         // Delete note

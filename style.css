@@ -894,6 +894,31 @@ body {
     height: 18px;
 }
 
+.btn-save {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--accent-success);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-save:hover {
+    background: #059669;
+}
+
+.btn-save svg {
+    width: 16px;
+    height: 16px;
+}
+
 /* Editor Content */
 .editor-content {
     flex: 1;
