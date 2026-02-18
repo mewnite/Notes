@@ -486,17 +486,14 @@ ${note.content || ''}`;
             return;
         }
         
-        elements.filesList.innerHTML = state.files.map(file => {
+        const filesHtml = state.files.map(file => {
             const isPdf = file.type === 'application/pdf';
-            const isMd = file.name.toLowerCase().endsWith('.md');
-            return `
-            <li class="file-item" data-id="${file.id}" title="${escapeHtml(file.name)}">
-                <div class="file-icon ${isPdf ? 'pdf' : ''} ${isMd ? 'md' : ''}">
-                    ${isPdf 
-                        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'
-                        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>'
-                    }
-                </div>
+            const iconSvg = isPdf 
+                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
+            
+            return `<li class="file-item" data-id="${file.id}" title="${escapeHtml(file.name)}">
+                <div class="file-icon ${isPdf ? 'pdf' : ''}">${iconSvg}</div>
                 <div class="file-info">
                     <div class="file-name">${escapeHtml(file.name)}</div>
                     <div class="file-size">${formatFileSize(file.size)}</div>
@@ -508,8 +505,10 @@ ${note.content || ''}`;
                         <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                 </button>
-            </li>
-        `).join('');
+            </li>`;
+        }).join('');
+        
+        elements.filesList.innerHTML = filesHtml;
     }
 
     // ====================
