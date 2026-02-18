@@ -80,15 +80,30 @@ const GistManager = (function() {
 
     async function getOrCreateGist() {
         try {
+            // First try to get gist by stored ID
             if (gistId) {
                 try {
                     const gist = await apiRequest(`/gists/${gistId}`);
                     return gist;
                 } catch (e) {
-                    console.log('Gist not found, creating new one');
+                    console.log('Gist not found by ID, searching...');
                 }
             }
 
+            // Try to find existing gist by searching user's gists
+            try {
+                const gists = await apiRequest('/gists');
+                for (const gist of gists) {
+                    if (gist.files && gist.files[GIST_FILENAME]) {
+                        setGistId(gist.id); // Store for future use
+                        return gist;
+                    }
+                }
+            } catch (e) {
+                console.log('Could not search gists, creating new one');
+            }
+
+            // Create new gist with empty notes
             const emptyData = {
                 version: '2.0',
                 lastSync: new Date().toISOString(),
