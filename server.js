@@ -4,7 +4,7 @@ const cors = require('cors');
 const { MongoClient } = require('mongodb');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
@@ -40,6 +40,47 @@ app.post('/notes', async (req, res) => {
     const note = req.body;
     const result = await notesCollection.insertOne(note);
     res.json({ insertedId: result.insertedId });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Replace all notes and files in the database (used by frontend bulk sync)
+app.put('/notes', async (req, res) => {
+  try {
+    const data = req.body || {};
+    const notes = Array.isArray(data.notes) ? data.notes : [];
+    const files = Array.isArray(data.files) ? data.files : [];
+
+    // Replace notes collection
+    await notesCollection.deleteMany({});
+    if (notes.length > 0) {
+      const notesToInsert = notes.map(n => ({
+        title: n.title,
+        subject: n.subject,
+        tags: n.tags || [],
+        content: n.content,
+        createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+        modifiedAt: n.modifiedAt ? new Date(n.modifiedAt) : new Date()
+      }));
+      await notesCollection.insertMany(notesToInsert);
+    }
+
+    // Replace files collection
+    const filesCollection = client.db(process.env.MONGODB_DB || 'notesdb').collection('files');
+    await filesCollection.deleteMany({});
+    if (files.length > 0) {
+      const filesToInsert = files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        content: f.content,
+        uploadedAt: f.uploadedAt ? new Date(f.uploadedAt) : new Date()
+      }));
+      await filesCollection.insertMany(filesToInsert);
+    }
+
+    res.json({ ok: true, notes: notes.length, files: files.length });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

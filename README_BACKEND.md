@@ -19,6 +19,12 @@ npm start
 API endpoints:
 - `GET /` -> health check
 - `GET /notes` -> list notes
+
+Environment variables:
+- `MONGODB_URI` : your Atlas connection string
+- `MONGODB_DB` : (optional) database name, default `notesdb`
+- `PORT` : port to run server locally
+- `CORS_ORIGIN` : origin allowed for browser requests (e.g. `https://mewnite.github.io`). If not set, CORS is wide open (`*`) — set this in production.
 - `POST /notes` -> insert note (JSON body)
 
 Notes:
