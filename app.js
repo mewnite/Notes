@@ -340,6 +340,29 @@
         showToast(`Descargando ${file.name}`, 'info');
     }
 
+    function exportNote(noteId) {
+        const note = state.notes.find(n => n.id === noteId);
+        if (!note) return;
+
+        const content = `# ${note.title || 'Sin título'}
+${note.subject ? `**Materia:** ${note.subject}\n` : ''}${note.tags && note.tags.length ? `**Etiquetas:** ${note.tags.join(', ')}\n` : ''}
+---
+
+${note.content || ''}`;
+
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${note.title || 'nota'}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast(`Exportando ${note.title || 'nota'}`, 'info');
+    }
+
     function deleteFile(fileId) {
         const index = state.files.findIndex(f => f.id === fileId);
         if (index > -1) {
@@ -397,7 +420,16 @@
                 <h3 class="note-card-title">${escapeHtml(note.title || 'Sin título')}</h3>
                 ${note.subject ? `<span class="note-card-subject">${escapeHtml(note.subject)}</span>` : ''}
                 <p class="note-card-preview">${escapeHtml(note.content || 'Sin contenido')}</p>
-                <span class="note-card-date">${formatDate(note.modifiedAt)}</span>
+                <div class="note-card-footer">
+                    <span class="note-card-date">${formatDate(note.modifiedAt)}</span>
+                    <button class="note-download" onclick="event.stopPropagation(); exportNote('${note.id}')" title="Exportar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         `).join('');
         
@@ -433,7 +465,10 @@
         elements.subjectList.innerHTML = html;
         elements.totalCount.textContent = state.notes.length;
         
-        elements.subjectsList.innerHTML = state.subjects.map(s => `<option value="${escapeHtml(s)}">`).join('');
+        // Update datalist for subject autocomplete
+        if (elements.subjectsList) {
+            elements.subjectsList.innerHTML = state.subjects.map(s => `<option value="${escapeHtml(s)}">`).join('');
+        }
         
         document.querySelectorAll('.subject-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -567,9 +602,36 @@
     // Event Handlers
     // ====================
     function setupEventListeners() {
-        // Sidebar toggle
+        // Sidebar toggle - works for both mobile (drawer) and desktop (collapse)
         elements.sidebarToggle.addEventListener('click', () => {
-            elements.sidebar.classList.toggle('open');
+            const isMobile = window.innerWidth <= 900;
+            
+            if (isMobile) {
+                // Mobile: open/close drawer
+                elements.sidebar.classList.toggle('open');
+            } else {
+                // Desktop: collapse/expand
+                elements.sidebar.classList.toggle('collapsed');
+                elements.app.classList.toggle('sidebar-collapsed');
+            }
+        });
+        
+        // Close mobile sidebar when clicking outside
+        document.addEventListener('click', (e) => {
+            const isMobile = window.innerWidth <= 900;
+            if (isMobile && elements.sidebar.classList.contains('open')) {
+                if (!elements.sidebar.contains(e.target) && !elements.sidebarToggle.contains(e.target)) {
+                    elements.sidebar.classList.remove('open');
+                }
+            }
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const isMobile = window.innerWidth <= 900;
+            if (!isMobile) {
+                elements.sidebar.classList.remove('open');
+            }
         });
         
         // New note
@@ -728,6 +790,7 @@
         
         // Make functions globally available
         window.downloadFile = downloadFile;
+        window.exportNote = exportNote;
         
         if (!GistManager.isAuthenticated()) {
             showAuthModal();

@@ -104,7 +104,7 @@ body {
     flex-direction: column;
     position: relative;
     z-index: 10;
-    transition: transform var(--transition);
+    transition: transform var(--transition), width var(--transition);
 }
 
 .sidebar::before {
@@ -512,6 +512,43 @@ body {
     position: relative;
     z-index: 1;
     overflow: hidden;
+    transition: margin-left var(--transition);
+}
+
+/* When sidebar is collapsed on desktop */
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .logo-accent,
+.sidebar.collapsed .sidebar-title,
+.sidebar.collapsed .subject-name,
+.sidebar.collapsed .subject-count,
+.sidebar.collapsed .quick-actions,
+.sidebar.collapsed .search-box,
+.sidebar.collapsed .sync-text,
+.sidebar.collapsed .subject-item:not(.subject-item:first-child),
+.sidebar.collapsed .file-item {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+    justify-content: center;
+    padding: 16px 8px;
+}
+
+.sidebar.collapsed .sidebar-section {
+    padding: 8px;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    justify-content: center;
+}
+
+.sidebar.collapsed .file-info,
+.sidebar.collapsed .file-download {
+    display: none;
 }
 
 /* Notes View */
@@ -661,6 +698,43 @@ body {
     color: var(--text-muted);
     padding-top: 8px;
     border-top: 1px solid var(--border-subtle);
+}
+
+.note-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.note-download {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+    opacity: 0;
+}
+
+.note-card:hover .note-download {
+    opacity: 1;
+}
+
+.note-download:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+.note-download svg {
+    width: 16px;
+    height: 16px;
 }
 
 /* Empty State */
@@ -1391,6 +1465,13 @@ body {
 
     .meta-field {
         min-width: 100%;
+    }
+}
+
+/* Desktop sidebar toggle always visible */
+@media (min-width: 901px) {
+    .sidebar-toggle {
+        display: flex !important;
     }
 }
 
