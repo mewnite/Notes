@@ -1,10 +1,11 @@
 /**
  * Notes Sync - Main Application Logic
+ * Using MongoDB Atlas for storage
  * 
  * Architecture:
- * - State management with immediate local persistence
- * - Save queue to handle rapid typing without race conditions
- * - Separated concerns: UI, Data, Sync
+ * - Immediate local persistence
+ * - MongoDB Atlas for cloud sync
+ * - Queue-based saves
  */
 
 (function() {
@@ -14,9 +15,9 @@
     // CONFIGURATION
     // ========================================
     const CONFIG = {
-        AUTO_SAVE_DELAY: 500,        // Faster auto-save (0.5s)
-        SYNC_DEBOUNCE: 1000,         // Sync to GitHub after 1s of inactivity
-        MAX_FILE_SIZE: 5 * 1024 * 1024  // 5MB max file size
+        AUTO_SAVE_DELAY: 500,
+        SYNC_DEBOUNCE: 1000,
+        MAX_FILE_SIZE: 5 * 1024 * 1024
     };
 
     // ========================================
@@ -28,9 +29,8 @@
         currentNote: null,
         filter: { subject: 'all', search: '', sort: 'modifiedAt' },
         subjects: [],
-        saveQueue: [],       // Queue for pending saves
-        isSaving: false,     // Currently syncing
-        lastSaveTime: 0      // Last successful save timestamp
+        isSaving: false,
+        lastSaveTime: 0
     };
 
     // ========================================
@@ -39,13 +39,11 @@
     const elements = {};
 
     function initElements() {
-        // Main views
         elements.app = document.getElementById('app');
         elements.sidebar = document.getElementById('sidebar');
         elements.notesView = document.getElementById('notesView');
         elements.editorView = document.getElementById('editorView');
         
-        // Sidebar
         elements.sidebarToggle = document.getElementById('sidebarToggle');
         elements.newNoteBtn = document.getElementById('newNoteBtn');
         elements.searchInput = document.getElementById('searchInput');
@@ -57,14 +55,12 @@
         elements.settingsBtn = document.getElementById('settingsBtn');
         elements.fileInput = document.getElementById('fileInput');
         
-        // Notes list
         elements.notesGrid = document.getElementById('notesGrid');
         elements.notesCount = document.getElementById('notesCount');
         elements.emptyState = document.getElementById('emptyState');
         elements.loadingState = document.getElementById('loadingState');
         elements.sortSelect = document.getElementById('sortSelect');
         
-        // Editor
         elements.backBtn = document.getElementById('backBtn');
         elements.saveNoteBtn = document.getElementById('saveNoteBtn');
         elements.deleteNoteBtn = document.getElementById('deleteNoteBtn');
@@ -77,17 +73,18 @@
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
         
-        // Modals
         elements.authModal = document.getElementById('authModal');
         elements.closeAuthModal = document.getElementById('closeAuthModal');
         elements.githubToken = document.getElementById('githubToken');
         elements.authError = document.getElementById('authError');
         elements.authErrorText = document.getElementById('authErrorText');
         elements.connectBtn = document.getElementById('connectBtn');
+        
         elements.deleteModal = document.getElementById('deleteModal');
         elements.closeDeleteModal = document.getElementById('closeDeleteModal');
         elements.cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
         elements.confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        
         elements.toastContainer = document.getElementById('toastContainer');
     }
 
@@ -119,7 +116,8 @@
         if (bytes === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
-        return parseFloat((bytes / Math.pow(k, Math.floor(bytes / k !== 0 ? Math.log(bytes) / Math.log(k) : 0))).toFixed(1)) + ' ' + sizes[Math.floor(Math.log(bytes) / Math.log(k))];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
     function debounce(func, wait) {
@@ -137,7 +135,7 @@
     }
 
     // ========================================
-    // TOAST NOTIFICATIONS
+    // TOAST
     // ========================================
     function showToast(message, type = 'info') {
         const icons = {
@@ -158,30 +156,23 @@
     }
 
     // ========================================
-    // DATA LAYER - Immediate local persistence
+    // DATA LAYER
     // ========================================
-    
-    // Save to localStorage IMMEDIATELY (for offline support)
     function saveToLocalCache() {
         try {
-            const payload = JSON.stringify({ notes: state.notes, files: state.files, lastSync: new Date().toISOString(), version: '2.0' });
-            if (window.StorageAdapter) {
-                window.StorageAdapter.setItem('notes_sync_local', payload);
-            } else {
-                localStorage.setItem('notes_sync_local', payload);
-            }
+            localStorage.setItem('notes_sync_local', JSON.stringify({
+                notes: state.notes,
+                files: state.files,
+                lastSync: new Date().toISOString()
+            }));
         } catch (e) {
-            console.error('Local cache save failed:', e);
+            console.error('Local cache error:', e);
         }
     }
 
-    // Load from local cache
-    async function loadFromLocalCache() {
+    function loadFromLocalCache() {
         try {
-            let cached = null;
-            if (window.StorageAdapter) cached = await window.StorageAdapter.getItem('notes_sync_local');
-            else cached = localStorage.getItem('notes_sync_local');
-
+            const cached = localStorage.getItem('notes_sync_local');
             if (cached) {
                 const data = JSON.parse(cached);
                 state.notes = data.notes || [];
@@ -189,61 +180,44 @@
                 return true;
             }
         } catch (e) {
-            console.error('Local cache load failed:', e);
+            console.error('Cache load error:', e);
         }
         return false;
     }
 
-    // Sync to GitHub - handles queue
-    async function syncToGitHub() {
+    async function syncToMongo() {
         if (state.isSaving) return;
-
-        // If offline, skip remote sync but keep local cache current
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-            console.warn('Offline - skipping GitHub sync');
-            updateSaveStatus('error');
-            showToast('Sin conexión - guardado local', 'info');
-            return;
-        }
-
+        
         state.isSaving = true;
         updateSaveStatus('saving');
-
+        
         try {
             const data = {
-                version: '2.0',
+                version: '3.0',
                 lastSync: new Date().toISOString(),
                 notes: state.notes,
                 files: state.files
             };
-
-            await GistManager.writeNotes(data);
+            
+            await MongoDBManager.writeNotes(data);
             state.lastSaveTime = Date.now();
             updateSaveStatus('saved');
-
-            // Update local cache after successful sync
             saveToLocalCache();
-
+            
         } catch (error) {
-            console.error('Sync failed:', error);
+            console.error('Sync error:', error);
             updateSaveStatus('error');
-            showToast('Error al guardar en GitHub', 'error');
+            showToast('Error al guardar: ' + error.message, 'error');
         } finally {
             state.isSaving = false;
         }
     }
 
-    // Queue-based save (for rapid typing)
     let saveTimeout = null;
     function queueSave() {
-        // Save to local cache immediately
         saveToLocalCache();
-        
-        // Debounce GitHub sync
         clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-            syncToGitHub();
-        }, CONFIG.SYNC_DEBOUNCE);
+        saveTimeout = setTimeout(() => syncToMongo(), CONFIG.SYNC_DEBOUNCE);
     }
 
     // ========================================
@@ -254,20 +228,18 @@
         updateSyncStatus('syncing');
         
         try {
-            const data = await GistManager.readNotes();
+            const data = await MongoDBManager.readNotes();
             state.notes = data.notes || [];
             state.files = data.files || [];
             
-            // Update local cache
             saveToLocalCache();
             
             updateSyncStatus('synced');
-            showToast('Notas cargadas', 'success');
+            showToast('Notas cargadas desde MongoDB', 'success');
         } catch (error) {
             console.error('Load error:', error);
             
-            // Try local cache
-            if (!(await loadFromLocalCache())) {
+            if (!loadFromLocalCache()) {
                 state.notes = [];
                 state.files = [];
             }
@@ -283,10 +255,9 @@
         }
     }
 
-    async function saveCurrentNote() {
+    function saveCurrentNote() {
         if (!state.currentNote) return;
         
-        // Update note data from form
         state.currentNote.title = elements.noteTitle.value.trim();
         state.currentNote.subject = elements.noteSubject.value.trim();
         state.currentNote.content = elements.noteContent.value;
@@ -295,38 +266,26 @@
         state.currentNote.tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
         state.currentNote.modifiedAt = new Date().toISOString();
         
-        // Check if note exists in array
         const existingIndex = state.notes.findIndex(n => n.id === state.currentNote.id);
         if (existingIndex === -1) {
             state.notes.unshift(state.currentNote);
         }
         
         updateWordCount();
-        
-        // Immediate local save (synchronous) + queued sync for remote
-        try { saveToLocalCache(); } catch (e) { console.warn('Local save failed', e); }
         queueSave();
     }
 
     async function deleteNote(noteId) {
         const index = state.notes.findIndex(n => n.id === noteId);
         if (index === -1) {
-            console.error('Note not found:', noteId);
             showToast('Nota no encontrada', 'error');
             return;
         }
         
-        const noteTitle = state.notes[index].title || 'Nota';
-        
-        // Remove from array
         state.notes.splice(index, 1);
-        
-        // Immediately save to local cache and queue sync
         saveToLocalCache();
         
-        // Force immediate sync
-        await syncToGitHub();
-        
+        await syncToMongo();
         showToast('Nota eliminada', 'success');
     }
 
@@ -374,7 +333,7 @@
 
         for (const file of files) {
             if (file.size > CONFIG.MAX_FILE_SIZE) {
-                showToast(`${file.name} es muy grande (max 5MB)`, 'error');
+                showToast(`${file.name} muy grande (max 5MB)`, 'error');
                 continue;
             }
             
@@ -429,17 +388,6 @@
         showToast(`Descargando ${file.name}`, 'info');
     }
 
-    function deleteFile(fileId) {
-        const index = state.files.findIndex(f => f.id === fileId);
-        if (index > -1) {
-            const fileName = state.files[index].name;
-            state.files.splice(index, 1);
-            queueSave();
-            renderFiles();
-            showToast(`${fileName} eliminado`, 'success');
-        }
-    }
-
     // ========================================
     // UI RENDERING
     // ========================================
@@ -453,7 +401,7 @@
 
     function updateSyncStatus(status) {
         elements.syncStatus.className = 'sync-status ' + status;
-        const texts = { syncing: 'Sincronizando...', synced: 'Sincronizado', error: 'Sin conexión' };
+        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión' };
         elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
     }
 
@@ -595,7 +543,6 @@
     }
 
     function closeEditor() {
-        // Save before closing
         if (state.currentNote) {
             saveCurrentNote();
         }
@@ -633,48 +580,41 @@
     // EVENT HANDLERS
     // ========================================
     function setupEventListeners() {
-        // Sidebar toggle
         elements.sidebarToggle.addEventListener('click', () => {
             const isMobile = window.innerWidth <= 900;
             if (isMobile) elements.sidebar.classList.toggle('open');
             else elements.sidebar.classList.toggle('collapsed');
         });
 
-        // New note
         elements.newNoteBtn.addEventListener('click', createNewNote);
-        
-        // File upload
         elements.fileInput.addEventListener('change', handleFileUpload);
         
-        // Drag and drop
         const uploadZone = document.getElementById('uploadZone');
         uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent-primary)'; });
         uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
-        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.borderColor = ''; elements.fileInput.files = e.dataTransfer.files; handleFileUpload({ target: elements.fileInput }); });
+        uploadZone.addEventListener('drop', e => { 
+            e.preventDefault(); 
+            uploadZone.style.borderColor = ''; 
+            elements.fileInput.files = e.dataTransfer.files; 
+            handleFileUpload({ target: elements.fileInput }); 
+        });
         
-        // Search
         elements.searchInput.addEventListener('input', debounce(e => { state.filter.search = e.target.value; renderNotes(); }, 300));
-        
-        // Sort
         elements.sortSelect.addEventListener('change', e => { state.filter.sort = e.target.value; renderNotes(); });
         
-        // Editor - immediate save on input (no debounce for local, debounce for sync)
         elements.noteTitle.addEventListener('input', saveCurrentNote);
         elements.noteSubject.addEventListener('input', saveCurrentNote);
         elements.noteTags.addEventListener('input', saveCurrentNote);
         elements.noteContent.addEventListener('input', saveCurrentNote);
         
-        // Manual save button
         elements.saveNoteBtn.addEventListener('click', () => {
             saveCurrentNote();
-            syncToGitHub();
+            syncToMongo();
             showToast('Nota guardada', 'success');
         });
         
-        // Navigation
         elements.backBtn.addEventListener('click', closeEditor);
         
-        // Delete
         elements.deleteNoteBtn.addEventListener('click', () => elements.deleteModal.classList.remove('hidden'));
         elements.closeDeleteModal.addEventListener('click', () => elements.deleteModal.classList.add('hidden'));
         elements.cancelDeleteBtn.addEventListener('click', () => elements.deleteModal.classList.add('hidden'));
@@ -687,51 +627,52 @@
             }
         });
         
-        // Sync
-        elements.syncBtn.addEventListener('click', () => { syncToGitHub(); loadNotes(); });
+        elements.syncBtn.addEventListener('click', () => { syncToMongo(); loadNotes(); });
         
-        // Settings - logout
         elements.settingsBtn.addEventListener('click', () => {
-            if (confirm('¿Cerrar sesión?')) {
-                GistManager.logout();
-                if (window.StorageAdapter) window.StorageAdapter.removeItem('notes_sync_local');
-                else localStorage.removeItem('notes_sync_local');
+            if (confirm('¿Cambiar conexión de MongoDB?')) {
+                MongoDBManager.logout();
+                localStorage.removeItem('notes_sync_local');
                 elements.authModal.classList.remove('hidden');
             }
         });
         
-        // Auth modal
         elements.closeAuthModal.addEventListener('click', () => elements.authModal.classList.add('hidden'));
         elements.connectBtn.addEventListener('click', handleAuth);
         elements.authModal.addEventListener('click', e => { if (e.target === elements.authModal) elements.authModal.classList.add('hidden'); });
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
-        // Keyboard shortcuts
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
             if (e.key === 'Escape' && !elements.editorView.classList.contains('hidden')) closeEditor();
         });
 
-        // Handle window resize
         window.addEventListener('resize', () => {
             if (window.innerWidth > 900) elements.sidebar.classList.remove('open');
         });
     }
 
     async function handleAuth() {
-        const token = elements.githubToken.value.trim();
-        if (!token) { showAuthError('Ingresa un token'); return; }
+        const uri = elements.githubToken.value.trim();
+        if (!uri) { showAuthError('Ingresa el Connection String'); return; }
+        
+        if (!uri.startsWith('mongodb')) {
+            showAuthError('Connection String de MongoDB inválido');
+            return;
+        }
         
         elements.connectBtn.disabled = true;
-        elements.connectBtn.textContent = 'Validando...';
+        elements.connectBtn.textContent = 'Conectando...';
         
         try {
-            await GistManager.validateToken(token);
-            GistManager.setToken(token);
+            const success = await MongoDBManager.testConnection(uri);
+            if (!success) throw new Error('Conexión fallida');
+            
+            MongoDBManager.setConnection(uri);
             elements.authModal.classList.add('hidden');
             elements.githubToken.value = '';
             elements.authError.classList.add('hidden');
-            showToast('Conectado a GitHub', 'success');
+            showToast('Conectado a MongoDB', 'success');
             await loadNotes();
         } catch (error) {
             showAuthError(error.message);
@@ -751,18 +692,13 @@
     // ========================================
     async function init() {
         initElements();
-        // Initialize storage adapter (IndexedDB) if available
-        if (window.StorageAdapter && typeof window.StorageAdapter.init === 'function') {
-            try { await window.StorageAdapter.init(); } catch (e) { console.warn('StorageAdapter init failed', e); }
-        }
-        GistManager.init();
+        MongoDBManager.init();
         setupEventListeners();
         
-        // Make functions global for onclick handlers
         window.downloadFile = downloadFile;
         window.exportNote = exportNote;
         
-        if (!GistManager.isAuthenticated()) {
+        if (!MongoDBManager.isAuthenticated()) {
             elements.authModal.classList.remove('hidden');
             return;
         }
@@ -771,22 +707,4 @@
     }
 
     document.addEventListener('DOMContentLoaded', init);
-
-    // Ensure local cache is flushed and attempt a keepalive sync on unload
-    window.addEventListener('beforeunload', (e) => {
-        try {
-            saveToLocalCache();
-        } catch (err) {
-            console.warn('Error saving local cache on unload', err);
-        }
-
-        try {
-            const data = { version: '2.0', lastSync: new Date().toISOString(), notes: state.notes, files: state.files };
-            if (GistManager && typeof GistManager.writeNotesKeepalive === 'function') {
-                GistManager.writeNotesKeepalive(data);
-            }
-        } catch (err) {
-            console.warn('Keepalive sync failed on unload', err);
-        }
-    });
 })();

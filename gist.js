@@ -14,6 +14,8 @@ const GistManager = (function() {
 
     let token = null;
     let gistId = null;
+    // timestamp (ms) until which the client should avoid making GitHub API calls
+    let rateLimitedUntil = 0;
 
     function init() {
         token = localStorage.getItem(STORAGE_KEY_TOKEN);
@@ -72,11 +74,34 @@ const GistManager = (function() {
                 if (!response.ok) {
                     const errorBody = await response.json().catch(() => ({}));
                     console.error('[GistManager] API Error:', response.status, errorBody);
+
+                    // Detect rate limit responses and set a cooldown until reset
+                    const rateMsg = (errorBody && errorBody.message) || '';
+                    const isRateLimit = response.status === 403 && /rate limit/i.test(rateMsg) || response.status === 429;
+                    if (isRateLimit) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        const resetHeader = response.headers.get('X-RateLimit-Reset');
+                        let waitMs = 60000; // default 60s
+                        if (retryAfter) {
+                            const secs = parseInt(retryAfter, 10);
+                            if (!isNaN(secs)) waitMs = secs * 1000;
+                        } else if (resetHeader) {
+                            const reset = parseInt(resetHeader, 10);
+                            if (!isNaN(reset)) {
+                                waitMs = Math.max((reset * 1000) - Date.now(), 0);
+                            }
+                        }
+                        rateLimitedUntil = Date.now() + waitMs;
+                        console.warn('[GistManager] Rate limited. Backing off for ms:', waitMs);
+                        throw new Error(`rate_limited:${waitMs}`);
+                    }
+
                     // Retry on 5xx server errors
                     if (response.status >= 500 && attempt < maxAttempts) {
                         await new Promise(r => setTimeout(r, 200 * attempt));
                         continue;
                     }
+
                     throw new Error(errorBody.message || `HTTP ${response.status}`);
                 }
 
@@ -91,6 +116,10 @@ const GistManager = (function() {
         }
 
         throw lastError || new Error('API request failed');
+    }
+
+    function getRateLimitReset() {
+        return rateLimitedUntil;
     }
 
     async function validateToken(newToken) {
@@ -283,7 +312,9 @@ const GistManager = (function() {
                 }
             });
 
+            
             console.log('[GistManager] Write successful!');
+            alert('Notas guardadas correctamente');
         } catch (error) {
             console.error('[GistManager] Error writing notes:', error);
             throw error;
@@ -345,10 +376,9 @@ const GistManager = (function() {
         readNotes,
         writeNotes,
         writeNotesKeepalive,
+        getRateLimitReset,
         deleteGist
     };
 })();
 
 window.GistManager = GistManager;
-
-

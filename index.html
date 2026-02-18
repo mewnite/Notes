@@ -114,10 +114,10 @@
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                         </svg>
                     </button>
-                    <button class="btn-icon" id="settingsBtn" title="Cuenta">
+                    <button class="btn-icon" id="settingsBtn" title="Configuración">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                            <circle cx="12" cy="7" r="4"/>
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                         </svg>
                     </button>
                 </div>
@@ -198,8 +198,6 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/>
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                <line x1="10" y1="11" x2="10" y2="17"/>
-                                <line x1="14" y1="11" x2="14" y2="17"/>
                             </svg>
                         </button>
                     </div>
@@ -248,17 +246,19 @@
         </main>
     </div>
 
-    <!-- Auth Modal -->
-    <div class="modal-overlay hidden" id="authModal">
+    <!-- MongoDB Setup Modal -->
+    <div class="modal-overlay" id="authModal">
         <div class="modal">
             <div class="modal-glow"></div>
             <div class="modal-header">
                 <div class="modal-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
                     </svg>
                 </div>
-                <h2 class="modal-title">Conectar con GitHub</h2>
+                <h2 class="modal-title">Conectar a MongoDB</h2>
                 <button class="btn-icon modal-close" id="closeAuthModal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -267,21 +267,22 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p class="auth-description">Ingresa tu token personal de GitHub para sincronizar tus notas entre dispositivos.</p>
+                <p class="auth-description">Ingresa tu MongoDB Atlas Connection String para sincronizar tus notas.</p>
                 
                 <div class="auth-steps">
-                    <h3>¿No tienes un token?</h3>
+                    <h3>¿No tienes MongoDB?</h3>
                     <ol>
-                        <li>Ve a <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></li>
-                        <li>Genera un token nuevo (Classic)</li>
-                        <li>Selecciona el alcance <code>gist</code></li>
-                        <li>Copia el token aquí</li>
+                        <li>Ve a <a href="https://www.mongodb.com/cloud/atlas" target="_blank">mongodb.com/cloud/atlas</a></li>
+                        <li>Crea una cuenta gratis y un cluster gratuito</li>
+                        <li>Crea una base de datos llamada <code>notes_sync</code></li>
+                        <li>En "Connect", elige "Connect your application"</li>
+                        <li>Copia el Connection String y reemplaza <password></li>
                     </ol>
                 </div>
 
                 <div class="form-group">
-                    <label for="githubToken">Token de GitHub</label>
-                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
+                    <label for="githubToken">MongoDB Connection String</label>
+                    <input type="text" id="githubToken" placeholder="mongodb+srv://...">
                 </div>
 
                 <div class="auth-error hidden" id="authError">
@@ -290,7 +291,7 @@
                         <line x1="15" y1="9" x2="9" y2="15"/>
                         <line x1="9" y1="9" x2="15" y2="15"/>
                     </svg>
-                    <span id="authErrorText">Token inválido</span>
+                    <span id="authErrorText">ConnectionString inválido</span>
                 </div>
             </div>
             <div class="modal-footer">
@@ -329,8 +330,7 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="storage.js"></script>
-    <script src="gist.js"></script>
+    <script src="mongodb.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
