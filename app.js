@@ -532,9 +532,19 @@
         elements.noteSubject.value = state.currentNote?.subject || '';
         elements.noteTags.value = (state.currentNote?.tags || []).join(', ');
         elements.noteContent.value = state.currentNote?.content || '';
+        // Autosize textarea to fit content
+        autosizeTextarea(elements.noteContent);
         
         updateWordCount();
         elements.noteTitle.focus();
+    }
+
+    // Autosize helper for textarea
+    function autosizeTextarea(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        const scrollH = el.scrollHeight;
+        el.style.height = Math.max(scrollH, 120) + 'px';
     }
 
     function closeEditor() {
@@ -600,7 +610,33 @@
         elements.noteTitle.addEventListener('input', saveCurrentNote);
         elements.noteSubject.addEventListener('input', saveCurrentNote);
         elements.noteTags.addEventListener('input', saveCurrentNote);
-        elements.noteContent.addEventListener('input', saveCurrentNote);
+        elements.noteContent.addEventListener('input', (e) => { saveCurrentNote(); autosizeTextarea(e.target); });
+
+        // Keyboard shortcuts in the editor
+        elements.noteContent.addEventListener('keydown', (e) => {
+            const isMod = e.ctrlKey || e.metaKey;
+            if (isMod && e.key === 'Enter') {
+                // save + sync
+                e.preventDefault();
+                saveCurrentNote();
+                syncToMongo();
+                showToast('Nota guardada', 'success');
+            }
+            if (isMod && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                saveCurrentNote();
+                showToast('Nota guardada', 'success');
+            }
+        });
+
+        // Pressing Enter on title saves and focuses content
+        elements.noteTitle.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveCurrentNote();
+                elements.noteContent.focus();
+            }
+        });
         
         elements.saveNoteBtn.addEventListener('click', () => {
             saveCurrentNote();

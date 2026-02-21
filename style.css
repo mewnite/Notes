@@ -414,6 +414,53 @@ body {
     .search-input { padding: 10px 12px 10px 40px; }
 }
 
+/* Editor textarea: big, inviting input area */
+.content-area textarea#noteContent {
+    width: 100%;
+    padding: 20px 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.7;
+    resize: none;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
+    outline: none;
+    min-height: 48vh;
+}
+
+.content-area textarea#noteContent::placeholder {
+    color: rgba(241,245,249,0.45);
+    font-style: italic;
+}
+
+.content-area textarea#noteContent:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 30px rgba(79,70,229,0.09), 0 0 0 6px rgba(99,102,241,0.06);
+    transform: translateY(-2px);
+}
+
+.editor-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.editor-hint .kbd {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.03);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
 .file-item:hover {
     background: var(--bg-hover);
 }
