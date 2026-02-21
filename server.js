@@ -4,9 +4,7 @@ const cors = require('cors');
 const { MongoClient } = require('mongodb');
 
 const app = express();
-// Respect CORS_ORIGIN env var, fallback to '*' for development
-const allowed = process.env.CORS_ORIGIN || '*';
-app.use(cors({ origin: allowed }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
@@ -47,14 +45,14 @@ app.post('/notes', async (req, res) => {
   }
 });
 
-// PUT /notes - replace notes and files collections
+// Replace all notes and files in the database (used by frontend bulk sync)
 app.put('/notes', async (req, res) => {
   try {
     const data = req.body || {};
     const notes = Array.isArray(data.notes) ? data.notes : [];
     const files = Array.isArray(data.files) ? data.files : [];
 
-    // Replace notes
+    // Replace notes collection
     await notesCollection.deleteMany({});
     if (notes.length > 0) {
       const notesToInsert = notes.map(n => ({
@@ -68,7 +66,7 @@ app.put('/notes', async (req, res) => {
       await notesCollection.insertMany(notesToInsert);
     }
 
-    // Replace files
+    // Replace files collection
     const filesCollection = client.db(process.env.MONGODB_DB || 'notesdb').collection('files');
     await filesCollection.deleteMany({});
     if (files.length > 0) {

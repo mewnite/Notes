@@ -401,7 +401,7 @@
 
     function updateSyncStatus(status) {
         elements.syncStatus.className = 'sync-status ' + status;
-        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión', offline: 'Modo offline' };
+        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión' };
         elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
     }
 
@@ -627,24 +627,12 @@
             }
         });
         
-        elements.syncBtn.addEventListener('click', () => {
-            if (MongoDBManager.isAuthenticated()) {
-                syncToMongo();
-                loadNotes();
-            } else {
-                elements.authModal.classList.remove('hidden');
-            }
-        });
+        elements.syncBtn.addEventListener('click', () => { syncToMongo(); loadNotes(); });
         
         elements.settingsBtn.addEventListener('click', () => {
-            // Toggle MongoDB connection
-            if (MongoDBManager.isAuthenticated()) {
-                if (confirm('¿Desconectar de MongoDB? Las notas seguirán en tu dispositivo.')) {
-                    MongoDBManager.logout();
-                    updateSyncStatus('offline');
-                    showToast('Desconectado de MongoDB', 'info');
-                }
-            } else {
+            if (confirm('¿Cambiar conexión de MongoDB?')) {
+                MongoDBManager.logout();
+                localStorage.removeItem('notes_sync_local');
                 elements.authModal.classList.remove('hidden');
             }
         });
@@ -710,21 +698,12 @@
         window.downloadFile = downloadFile;
         window.exportNote = exportNote;
         
-        // Start in offline mode by default
-        loadFromLocalCache();
-        extractSubjects();
-        renderNotes();
-        renderSubjects();
-        renderFiles();
-        
-        // Show offline status
-        updateSyncStatus('offline');
-        showToast('Modo offline - Tus notas están guardadas localmente', 'info');
-        
-        // Try to connect to MongoDB if credentials exist
-        if (MongoDBManager.isAuthenticated()) {
-            await loadNotes();
+        if (!MongoDBManager.isAuthenticated()) {
+            elements.authModal.classList.remove('hidden');
+            return;
         }
+        
+        await loadNotes();
     }
 
     document.addEventListener('DOMContentLoaded', init);
