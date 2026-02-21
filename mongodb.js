@@ -54,15 +54,9 @@ const MongoDBManager = (function() {
             await client.connect();
             
             // Extract database name from URI - MongoDB allows underscores!
-            // Format: mongodb+srv://user:pass@cluster.mongodb.net/DATABASE?options
             const uriObj = new URL(mongoUri);
             const pathParts = uriObj.pathname.split('/').filter(p => p);
-            let dbName = pathParts[0] || 'test';
-            
-            // If no database in path, check appName parameter
-            if (!pathParts[0] && uriObj.searchParams.has('appName')) {
-                dbName = uriObj.searchParams.get('appName');
-            }
+            const dbName = pathParts[0] || 'test';
             
             db = client.db(dbName);
             console.log('[MongoDB] Connected to database:', dbName);
