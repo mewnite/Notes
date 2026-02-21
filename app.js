@@ -629,8 +629,8 @@
         });
         
         elements.settingsBtn.addEventListener('click', async () => {
-            if (confirm('¿Cambiar la conexión de MongoDB?')) {
-                const uri = prompt('Pega el Connection String de MongoDB (o deja vacío para desconectar):');
+            if (confirm('¿Cambiar la URL del backend API?')) {
+                const uri = prompt('Pega la URL del backend API (ej. https://notes-ekmk.onrender.com). Deja vacío para desconectar:');
                 if (uri === null) return; // cancel
                 if (uri.trim() === '') {
                     MongoDBManager.logout();
