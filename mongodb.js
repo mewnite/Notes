@@ -1,78 +1,161 @@
 /**
- * Browser-side MongoDB adapter that calls the deployed backend API.
- * Uses the public Render URL as the API endpoint and exposes the same
- * methods the app expects (`init`, `readNotes`, `writeNotes`, etc.).
+ * Notes Sync - MongoDB Atlas Storage Module
+ * 
+ * Usage:
+ * 1. Create free cluster at https://www.mongodb.com/cloud/atlas
+ * 2. Get connection string (Driver: Node.js)
+ * 3. Add database name at end of URI: /notessync
+ * 
+ * Connection string format:
+ * mongodb+srv://<username>:<password>@cluster0.xxx.mongodb.net/notessync?retryWrites=true&w=majority
  */
 
 const MongoDBManager = (function() {
     'use strict';
 
-    const API_BASE = 'https://notes-ekmk.onrender.com';
     const STORAGE_KEY_CONNECTION = 'notes_sync_mongo_uri';
 
-    // We treat the backend API as the authoritative connector, so the
-    // manager is considered "authenticated" by default.
+    let mongoUri = null;
+    let client = null;
+    let db = null;
+
     function init() {
-        // store the API base for compatibility with UI that shows connection
-        try { localStorage.setItem(STORAGE_KEY_CONNECTION, API_BASE); } catch (e) {}
-        return true;
+        mongoUri = localStorage.getItem(STORAGE_KEY_CONNECTION);
+        return isAuthenticated();
     }
 
-    function isAuthenticated() { return true; }
-    function getConnection() { return API_BASE; }
-    function setConnection(uri) { try { localStorage.setItem(STORAGE_KEY_CONNECTION, uri); } catch (e) {} }
-    function logout() { try { localStorage.removeItem(STORAGE_KEY_CONNECTION); } catch (e) {} }
+    function isAuthenticated() {
+        return mongoUri !== null;
+    }
+
+    function getConnection() {
+        return mongoUri;
+    }
+
+    function setConnection(uri) {
+        mongoUri = uri;
+        localStorage.setItem(STORAGE_KEY_CONNECTION, uri);
+    }
+
+    function logout() {
+        mongoUri = null;
+        client = null;
+        db = null;
+        localStorage.removeItem(STORAGE_KEY_CONNECTION);
+    }
+
+    async function connect() {
+        if (!mongoUri) throw new Error('No MongoDB URI configured');
+        
+        try {
+            const { MongoClient } = await import('https://unpkg.com/mongodb@6.8.0/dist/mongodb.esm.mjs');
+            
+            client = new MongoClient(mongoUri);
+            await client.connect();
+            
+            // Extract database name from URI - MongoDB allows underscores!
+            const uriObj = new URL(mongoUri);
+            const pathParts = uriObj.pathname.split('/').filter(p => p);
+            const dbName = pathParts[0] || 'test';
+            
+            db = client.db(dbName);
+            console.log('[MongoDB] Connected to database:', dbName);
+            
+            return { client, db };
+        } catch (error) {
+            console.error('[MongoDB] Connection error:', error);
+            throw error;
+        }
+    }
 
     async function testConnection(uri) {
         try {
-            const res = await fetch((uri || API_BASE) + '/');
-            return res.ok;
-        } catch (e) {
-            console.error('[MongoDB] testConnection failed', e);
+            const { MongoClient } = await import('https://unpkg.com/mongodb@6.8.0/dist/mongodb.esm.mjs');
+            const testClient = new MongoClient(uri);
+            await testClient.connect();
+            await testClient.db().command({ ping: 1 });
+            await testClient.close();
+            return true;
+        } catch (error) {
+            console.error('[MongoDB] Test failed:', error);
             return false;
         }
     }
 
     async function readNotes() {
         try {
-            const res = await fetch(API_BASE + '/notes');
-            if (!res.ok) throw new Error('Failed to fetch notes: ' + res.status);
-            const docs = await res.json();
-
-            // Map DB docs into app format
-            const notes = (docs || []).map(d => ({
-                id: d._id || d.id || (d._id && d._id.toString && d._id.toString()) || null,
-                title: d.title || '',
-                subject: d.subject || '',
-                tags: d.tags || [],
-                content: d.content || '',
-                createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-                modifiedAt: d.modifiedAt ? new Date(d.modifiedAt).toISOString() : new Date().toISOString()
-            }));
-
-            // Files are stored in a separate collection; backend currently does not expose a files endpoint
-            // We'll return an empty files array to keep the app working.
-            return { version: '3.0', lastSync: new Date().toISOString(), notes, files: [] };
+            await connect();
+            
+            const notesCollection = db.collection('notes');
+            const filesCollection = db.collection('files');
+            
+            const notes = await notesCollection.find({}).toArray();
+            const files = await filesCollection.find({}).toArray();
+            
+            console.log(`[MongoDB] Loaded ${notes.length} notes, ${files.length} files`);
+            
+            return {
+                version: '3.0',
+                lastSync: new Date().toISOString(),
+                notes: notes.map(n => ({
+                    id: n._id.toString(),
+                    title: n.title,
+                    subject: n.subject,
+                    tags: n.tags || [],
+                    content: n.content,
+                    createdAt: n.createdAt?.toISOString() || new Date().toISOString(),
+                    modifiedAt: n.modifiedAt?.toISOString() || new Date().toISOString()
+                })),
+                files: files.map(f => ({
+                    id: f._id.toString(),
+                    name: f.name,
+                    type: f.type,
+                    size: f.size,
+                    content: f.content,
+                    uploadedAt: f.uploadedAt?.toISOString() || new Date().toISOString()
+                }))
+            };
         } catch (error) {
-            console.error('[MongoDB] readNotes error', error);
+            console.error('[MongoDB] Read error:', error);
             throw error;
         }
     }
 
     async function writeNotes(data) {
         try {
-            const res = await fetch(API_BASE + '/notes', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            if (!res.ok) {
-                const body = await res.text().catch(() => '');
-                throw new Error('Write failed: ' + res.status + ' ' + body);
+            await connect();
+            
+            const notesCollection = db.collection('notes');
+            const filesCollection = db.collection('files');
+            
+            await notesCollection.deleteMany({});
+            if (data.notes && data.notes.length > 0) {
+                const notesToInsert = data.notes.map(n => ({
+                    title: n.title,
+                    subject: n.subject,
+                    tags: n.tags || [],
+                    content: n.content,
+                    createdAt: new Date(n.createdAt),
+                    modifiedAt: new Date(n.modifiedAt)
+                }));
+                await notesCollection.insertMany(notesToInsert);
             }
-            return await res.json();
+            
+            await filesCollection.deleteMany({});
+            if (data.files && data.files.length > 0) {
+                const filesToInsert = data.files.map(f => ({
+                    name: f.name,
+                    type: f.type,
+                    size: f.size,
+                    content: f.content,
+                    uploadedAt: new Date(f.uploadedAt)
+                }));
+                await filesCollection.insertMany(filesToInsert);
+            }
+            
+            console.log(`[MongoDB] Saved ${data.notes?.length || 0} notes, ${data.files?.length || 0} files`);
         } catch (error) {
-            console.error('[MongoDB] writeNotes error', error);
+            console.error('[MongoDB] Write error:', error);
             throw error;
         }
     }

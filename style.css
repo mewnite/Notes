@@ -61,7 +61,8 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
-    overflow: hidden;
+    overflow: auto;
+    -webkit-font-smoothing: antialiased;
     min-height: 100vh;
 }
 
@@ -179,7 +180,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 14px 20px;
+    padding: 14px 22px;
     background: linear-gradient(135deg, var(--accent-secondary), var(--accent-tertiary));
     border: none;
     border-radius: var(--radius-md);
@@ -388,6 +389,29 @@ body {
     cursor: pointer;
     transition: var(--transition);
     margin-bottom: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; position: relative; height: auto; }
+    .sidebar-header { padding: 12px; }
+    .sidebar-section { padding: 8px; }
+    .notesGrid, .notes-grid { padding: 8px; }
+    .logo-text { font-size: 18px; }
+    .btn-new-note { padding: 12px 16px; font-size: 15px; }
+    .notesGrid, .notes-grid, .notesView { width: 100%; }
+    .editorView, .editor-view { width: 100%; }
+    textarea#noteContent { min-height: 40vh; }
+    .sidebar-toggle { display: block; }
+    .sidebar.collapsed { width: 100%; }
+}
+
+@media (max-width: 480px) {
+    :root { --font-size-small: 14px; }
+    .logo-text { font-size: 16px; }
+    .btn-new-note { padding: 12px; font-size: 15px; }
+    .search-input { padding: 10px 12px 10px 40px; }
 }
 
 .file-item:hover {

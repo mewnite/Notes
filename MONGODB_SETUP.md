@@ -53,7 +53,6 @@
    ```
    mongodb+srv://notesuser:NotesSync123!@notescluster.xxxxx.mongodb.net/
    mongodb+srv://noteuser:NotesSync123@notescluster.c3yjq2b.mongodb.net/?appName=NotesCluster
-   mongodb+srv://noteuser:NotesSync123@notescluster.c3yjq2b.mongodb.net/?appName=notessync
    ```
 5. Click en "Conectar"
 

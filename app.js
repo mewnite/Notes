@@ -73,12 +73,7 @@
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
         
-        elements.authModal = document.getElementById('authModal');
-        elements.closeAuthModal = document.getElementById('closeAuthModal');
-        elements.githubToken = document.getElementById('githubToken');
-        elements.authError = document.getElementById('authError');
-        elements.authErrorText = document.getElementById('authErrorText');
-        elements.connectBtn = document.getElementById('connectBtn');
+        // authentication modal removed — connection is handled via backend
         
         elements.deleteModal = document.getElementById('deleteModal');
         elements.closeDeleteModal = document.getElementById('closeDeleteModal');
@@ -401,7 +396,7 @@
 
     function updateSyncStatus(status) {
         elements.syncStatus.className = 'sync-status ' + status;
-        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión' };
+        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión', offline: 'Modo offline' };
         elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
     }
 
@@ -627,19 +622,33 @@
             }
         });
         
-        elements.syncBtn.addEventListener('click', () => { syncToMongo(); loadNotes(); });
-        
-        elements.settingsBtn.addEventListener('click', () => {
-            if (confirm('¿Cambiar conexión de MongoDB?')) {
-                MongoDBManager.logout();
-                localStorage.removeItem('notes_sync_local');
-                elements.authModal.classList.remove('hidden');
-            }
+        elements.syncBtn.addEventListener('click', () => {
+            // Attempt sync and reload notes; MongoDBManager will use the deployed API by default
+            syncToMongo();
+            loadNotes();
         });
         
-        elements.closeAuthModal.addEventListener('click', () => elements.authModal.classList.add('hidden'));
-        elements.connectBtn.addEventListener('click', handleAuth);
-        elements.authModal.addEventListener('click', e => { if (e.target === elements.authModal) elements.authModal.classList.add('hidden'); });
+        elements.settingsBtn.addEventListener('click', async () => {
+            if (confirm('¿Cambiar la conexión de MongoDB?')) {
+                const uri = prompt('Pega el Connection String de MongoDB (o deja vacío para desconectar):');
+                if (uri === null) return; // cancel
+                if (uri.trim() === '') {
+                    MongoDBManager.logout();
+                    updateSyncStatus('offline');
+                    showToast('Conexión eliminada. Modo offline activo.', 'info');
+                    return;
+                }
+                try {
+                    const ok = await MongoDBManager.testConnection(uri);
+                    if (!ok) throw new Error('Conexión fallida');
+                    MongoDBManager.setConnection(uri);
+                    showToast('Conexión actualizada', 'success');
+                    await loadNotes();
+                } catch (e) {
+                    showToast('Conexión inválida: ' + (e.message || e), 'error');
+                }
+            }
+        });
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
         document.addEventListener('keydown', e => {
@@ -652,40 +661,7 @@
         });
     }
 
-    async function handleAuth() {
-        const uri = elements.githubToken.value.trim();
-        if (!uri) { showAuthError('Ingresa el Connection String'); return; }
-        
-        if (!uri.startsWith('mongodb')) {
-            showAuthError('Connection String de MongoDB inválido');
-            return;
-        }
-        
-        elements.connectBtn.disabled = true;
-        elements.connectBtn.textContent = 'Conectando...';
-        
-        try {
-            const success = await MongoDBManager.testConnection(uri);
-            if (!success) throw new Error('Conexión fallida');
-            
-            MongoDBManager.setConnection(uri);
-            elements.authModal.classList.add('hidden');
-            elements.githubToken.value = '';
-            elements.authError.classList.add('hidden');
-            showToast('Conectado a MongoDB', 'success');
-            await loadNotes();
-        } catch (error) {
-            showAuthError(error.message);
-        } finally {
-            elements.connectBtn.disabled = false;
-            elements.connectBtn.textContent = 'Conectar';
-        }
-    }
-
-    function showAuthError(msg) {
-        elements.authError.classList.remove('hidden');
-        elements.authErrorText.textContent = msg;
-    }
+    // Authentication via modal removed — connection managed via settings prompt or backend defaults
 
     // ========================================
     // INITIALIZATION
@@ -698,12 +674,21 @@
         window.downloadFile = downloadFile;
         window.exportNote = exportNote;
         
-        if (!MongoDBManager.isAuthenticated()) {
-            elements.authModal.classList.remove('hidden');
-            return;
-        }
+        // Start in offline mode by default
+        loadFromLocalCache();
+        extractSubjects();
+        renderNotes();
+        renderSubjects();
+        renderFiles();
         
-        await loadNotes();
+        // Show offline status
+        updateSyncStatus('offline');
+        showToast('Modo offline - Tus notas están guardadas localmente', 'info');
+        
+        // Try to connect to MongoDB if credentials exist
+        if (MongoDBManager.isAuthenticated()) {
+            await loadNotes();
+        }
     }
 
     document.addEventListener('DOMContentLoaded', init);
