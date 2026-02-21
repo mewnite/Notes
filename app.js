@@ -1,41 +1,25 @@
 /**
- * Notes Sync - Main Application Logic
- * Using MongoDB Atlas for storage
- * 
- * Architecture:
- * - Immediate local persistence
- * - MongoDB Atlas for cloud sync
- * - Queue-based saves
+ * Notes Sync - Offline Mode
+ * Works locally with localStorage + Export/Import for syncing
  */
 
 (function() {
     'use strict';
 
-    // ========================================
-    // CONFIGURATION
-    // ========================================
     const CONFIG = {
-        AUTO_SAVE_DELAY: 500,
-        SYNC_DEBOUNCE: 1000,
-        MAX_FILE_SIZE: 5 * 1024 * 1024
+        STORAGE_KEY: 'notes_offline_data',
+        AUTO_SAVE_DELAY: 300
     };
 
-    // ========================================
-    // STATE
-    // ========================================
     const state = {
         notes: [],
         files: [],
         currentNote: null,
         filter: { subject: 'all', search: '', sort: 'modifiedAt' },
         subjects: [],
-        isSaving: false,
-        lastSaveTime: 0
+        isSaving: false
     };
 
-    // ========================================
-    // DOM ELEMENTS
-    // ========================================
     const elements = {};
 
     function initElements() {
@@ -43,24 +27,18 @@
         elements.sidebar = document.getElementById('sidebar');
         elements.notesView = document.getElementById('notesView');
         elements.editorView = document.getElementById('editorView');
-        
         elements.sidebarToggle = document.getElementById('sidebarToggle');
         elements.newNoteBtn = document.getElementById('newNoteBtn');
+        elements.exportBtn = document.getElementById('exportBtn');
         elements.searchInput = document.getElementById('searchInput');
         elements.subjectList = document.getElementById('subjectList');
         elements.filesList = document.getElementById('filesList');
         elements.totalCount = document.getElementById('totalCount');
-        elements.syncStatus = document.getElementById('syncStatus');
-        elements.syncBtn = document.getElementById('syncBtn');
-        elements.settingsBtn = document.getElementById('settingsBtn');
-        elements.fileInput = document.getElementById('fileInput');
-        
         elements.notesGrid = document.getElementById('notesGrid');
         elements.notesCount = document.getElementById('notesCount');
         elements.emptyState = document.getElementById('emptyState');
         elements.loadingState = document.getElementById('loadingState');
         elements.sortSelect = document.getElementById('sortSelect');
-        
         elements.backBtn = document.getElementById('backBtn');
         elements.saveNoteBtn = document.getElementById('saveNoteBtn');
         elements.deleteNoteBtn = document.getElementById('deleteNoteBtn');
@@ -72,25 +50,14 @@
         elements.subjectsList = document.getElementById('subjectsList');
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
-        
-        elements.authModal = document.getElementById('authModal');
-        elements.closeAuthModal = document.getElementById('closeAuthModal');
-        elements.githubToken = document.getElementById('githubToken');
-        elements.authError = document.getElementById('authError');
-        elements.authErrorText = document.getElementById('authErrorText');
-        elements.connectBtn = document.getElementById('connectBtn');
-        
         elements.deleteModal = document.getElementById('deleteModal');
         elements.closeDeleteModal = document.getElementById('closeDeleteModal');
         elements.cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
         elements.confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-        
+        elements.fileInput = document.getElementById('fileInput');
         elements.toastContainer = document.getElementById('toastContainer');
     }
 
-    // ========================================
-    // UTILITIES
-    // ========================================
     function generateId() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
             const r = Math.random() * 16 | 0;
@@ -102,14 +69,10 @@
         const date = new Date(isoString);
         const now = new Date();
         const diff = now - date;
-        
         if (diff < 60000) return 'Ahora';
         if (diff < 3600000) return `Hace ${Math.floor(diff / 60000)}m`;
         if (diff < 86400000) return `Hace ${Math.floor(diff / 3600000)}h`;
-        if (date.getFullYear() === now.getFullYear()) {
-            return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-        }
-        return date.toLocaleDateString('es-ES', { year: 'numeric', day: 'numeric', month: 'short' });
+        return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     }
 
     function formatFileSize(bytes) {
@@ -134,127 +97,49 @@
         return div.innerHTML;
     }
 
-    // ========================================
-    // TOAST
-    // ========================================
     function showToast(message, type = 'info') {
         const icons = {
             success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
-            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
-            info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line></svg>',
+            info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line></svg>'
         };
-        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.innerHTML = `${icons[type]}<span>${message}</span>`;
         elements.toastContainer.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 200);
-        }, 3000);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 200); }, 3000);
     }
 
-    // ========================================
-    // DATA LAYER
-    // ========================================
-    function saveToLocalCache() {
+    // ========== STORAGE ==========
+    function saveData() {
         try {
-            localStorage.setItem('notes_sync_local', JSON.stringify({
-                notes: state.notes,
-                files: state.files,
-                lastSync: new Date().toISOString()
-            }));
+            const data = { notes: state.notes, files: state.files, lastSave: new Date().toISOString() };
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(data));
+            updateSaveStatus('saved');
         } catch (e) {
-            console.error('Local cache error:', e);
+            console.error('Save error:', e);
+            showToast('Error al guardar', 'error');
         }
     }
 
-    function loadFromLocalCache() {
+    function loadData() {
         try {
-            const cached = localStorage.getItem('notes_sync_local');
-            if (cached) {
-                const data = JSON.parse(cached);
+            const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
+            if (stored) {
+                const data = JSON.parse(stored);
                 state.notes = data.notes || [];
                 state.files = data.files || [];
                 return true;
             }
         } catch (e) {
-            console.error('Cache load error:', e);
+            console.error('Load error:', e);
         }
         return false;
     }
 
-    async function syncToMongo() {
-        if (state.isSaving) return;
-        
-        state.isSaving = true;
-        updateSaveStatus('saving');
-        
-        try {
-            const data = {
-                version: '3.0',
-                lastSync: new Date().toISOString(),
-                notes: state.notes,
-                files: state.files
-            };
-            
-            await MongoDBManager.writeNotes(data);
-            state.lastSaveTime = Date.now();
-            updateSaveStatus('saved');
-            saveToLocalCache();
-            
-        } catch (error) {
-            console.error('Sync error:', error);
-            updateSaveStatus('error');
-            showToast('Error al guardar: ' + error.message, 'error');
-        } finally {
-            state.isSaving = false;
-        }
-    }
+    const debouncedSave = debounce(saveData, CONFIG.AUTO_SAVE_DELAY);
 
-    let saveTimeout = null;
-    function queueSave() {
-        saveToLocalCache();
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => syncToMongo(), CONFIG.SYNC_DEBOUNCE);
-    }
-
-    // ========================================
-    // DATA OPERATIONS
-    // ========================================
-    async function loadNotes() {
-        showLoading(true);
-        updateSyncStatus('syncing');
-        
-        try {
-            const data = await MongoDBManager.readNotes();
-            state.notes = data.notes || [];
-            state.files = data.files || [];
-            
-            saveToLocalCache();
-            
-            updateSyncStatus('synced');
-            showToast('Notas cargadas desde MongoDB', 'success');
-        } catch (error) {
-            console.error('Load error:', error);
-            
-            if (!loadFromLocalCache()) {
-                state.notes = [];
-                state.files = [];
-            }
-            
-            updateSyncStatus('error');
-            showToast('Sin conexión - modo offline', 'info');
-        } finally {
-            showLoading(false);
-            extractSubjects();
-            renderNotes();
-            renderSubjects();
-            renderFiles();
-        }
-    }
-
+    // ========== DATA OPERATIONS ==========
     function saveCurrentNote() {
         if (!state.currentNote) return;
         
@@ -266,117 +151,108 @@
         state.currentNote.tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
         state.currentNote.modifiedAt = new Date().toISOString();
         
-        const existingIndex = state.notes.findIndex(n => n.id === state.currentNote.id);
-        if (existingIndex === -1) {
-            state.notes.unshift(state.currentNote);
-        }
+        const idx = state.notes.findIndex(n => n.id === state.currentNote.id);
+        if (idx === -1) state.notes.unshift(state.currentNote);
         
         updateWordCount();
-        queueSave();
+        debouncedSave();
     }
 
     async function deleteNote(noteId) {
-        const index = state.notes.findIndex(n => n.id === noteId);
-        if (index === -1) {
-            showToast('Nota no encontrada', 'error');
-            return;
+        const idx = state.notes.findIndex(n => n.id === noteId);
+        if (idx > -1) {
+            state.notes.splice(idx, 1);
+            saveData();
+            showToast('Nota eliminada', 'success');
         }
-        
-        state.notes.splice(index, 1);
-        saveToLocalCache();
-        
-        await syncToMongo();
-        showToast('Nota eliminada', 'success');
     }
 
     function extractSubjects() {
         const subjects = new Set();
-        state.notes.forEach(note => {
-            if (note.subject && note.subject.trim()) {
-                subjects.add(note.subject.trim());
-            }
-        });
+        state.notes.forEach(n => { if (n.subject?.trim()) subjects.add(n.subject.trim()); });
         state.subjects = Array.from(subjects).sort();
     }
 
     function getFilteredNotes() {
         let filtered = [...state.notes];
-        
-        if (state.filter.subject !== 'all') {
-            filtered = filtered.filter(n => n.subject === state.filter.subject);
-        }
-        
+        if (state.filter.subject !== 'all') filtered = filtered.filter(n => n.subject === state.filter.subject);
         if (state.filter.search) {
-            const search = state.filter.search.toLowerCase();
-            filtered = filtered.filter(n =>
-                (n.title || '').toLowerCase().includes(search) ||
-                (n.content || '').toLowerCase().includes(search) ||
-                (n.tags || []).some(t => t.toLowerCase().includes(search))
-            );
+            const s = state.filter.search.toLowerCase();
+            filtered = filtered.filter(n => (n.title || '').toLowerCase().includes(s) || (n.content || '').toLowerCase().includes(s));
         }
-        
         filtered.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
-        
         if (state.filter.sort === 'title') filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
         if (state.filter.sort === 'subject') filtered.sort((a, b) => (a.subject || '').localeCompare(b.subject || ''));
         if (state.filter.sort === 'createdAt') filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
         return filtered;
     }
 
-    // ========================================
-    // FILE HANDLING
-    // ========================================
-    async function handleFileUpload(event) {
-        const files = event.target.files;
+    // ========== FILES ==========
+    async function handleFileUpload(e) {
+        const files = e.target.files;
         if (!files || files.length === 0) return;
 
         for (const file of files) {
-            if (file.size > CONFIG.MAX_FILE_SIZE) {
-                showToast(`${file.name} muy grande (max 5MB)`, 'error');
+            if (file.size > 5 * 1024 * 1024) {
+                showToast(`${file.name} muy grande`, 'error');
                 continue;
             }
-            
             try {
-                const content = await readFileContent(file);
-                state.files.push({
-                    id: generateId(),
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    content: content,
-                    uploadedAt: new Date().toISOString()
+                const content = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(file);
+                    } else if (file.name.endsWith('.json')) {
+                        reader.onload = () => {
+                            try {
+                                const data = JSON.parse(reader.result);
+                                if (data.notes) state.notes = data.notes;
+                                if (data.files) state.files = data.files;
+                                showToast('Datos importados correctamente', 'success');
+                            } catch(err) { reject(err); }
+                        };
+                        reader.readAsText(file);
+                    } else {
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsText(file);
+                    }
+                    reader.onerror = reject;
                 });
-                showToast(`${file.name} subido`, 'success');
-            } catch (error) {
-                showToast(`Error al subir ${file.name}`, 'error');
+
+                if (!file.name.endsWith('.json')) {
+                    state.files.push({
+                        id: generateId(), name: file.name, type: file.type, size: file.size,
+                        content: content, uploadedAt: new Date().toISOString()
+                    });
+                    showToast(`${file.name} importado`, 'success');
+                }
+            } catch (err) {
+                showToast(`Error: ${file.name}`, 'error');
             }
         }
-        
-        queueSave();
+        saveData();
         renderFiles();
-        event.target.value = '';
+        renderNotes();
+        renderSubjects();
+        e.target.value = '';
     }
 
-    function readFileContent(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            if (file.type === 'application/pdf') {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            } else {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsText(file);
-            }
-        });
+    function exportAll() {
+        const data = { notes: state.notes, files: state.files, exportedAt: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `notas_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Notas exportadas', 'success');
     }
 
     function downloadFile(fileId) {
         const file = state.files.find(f => f.id === fileId);
         if (!file) return;
-        
         const blob = new Blob([file.content], { type: file.type });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -384,43 +260,19 @@
         a.download = file.name;
         a.click();
         URL.revokeObjectURL(url);
-        
-        showToast(`Descargando ${file.name}`, 'info');
     }
 
-    // ========================================
-    // UI RENDERING
-    // ========================================
-    function showLoading(show) {
-        elements.loadingState.classList.toggle('visible', show);
-    }
-
-    function showEmptyState(show) {
-        elements.emptyState.classList.toggle('visible', show && state.notes.length === 0);
-    }
-
-    function updateSyncStatus(status) {
-        elements.syncStatus.className = 'sync-status ' + status;
-        const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión' };
-        elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
-    }
-
-    function updateSaveStatus(status) {
-        elements.saveStatus.className = 'save-status ' + status;
-        elements.saveStatus.textContent = status === 'saved' ? '✓ Guardado' : status === 'saving' ? 'Guardando...' : status === 'error' ? 'Error' : '';
-    }
-
+    // ========== RENDER ==========
     function renderNotes() {
         const filtered = getFilteredNotes();
         elements.notesCount.textContent = `${state.notes.length} nota${state.notes.length !== 1 ? 's' : ''}`;
         
         if (filtered.length === 0 && state.notes.length === 0) {
-            showEmptyState(true);
+            elements.emptyState.classList.add('visible');
             elements.notesGrid.innerHTML = '';
             return;
         }
-        
-        showEmptyState(false);
+        elements.emptyState.classList.remove('visible');
         
         elements.notesGrid.innerHTML = filtered.map(note => `
             <div class="note-card" data-id="${note.id}">
@@ -429,13 +281,6 @@
                 <p class="note-card-preview">${escapeHtml(note.content || 'Sin contenido')}</p>
                 <div class="note-card-footer">
                     <span class="note-card-date">${formatDate(note.modifiedAt)}</span>
-                    <button class="note-download" onclick="event.stopPropagation(); exportNote('${note.id}')" title="Exportar">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </button>
                 </div>
             </div>
         `).join('');
@@ -480,7 +325,6 @@
             elements.filesList.innerHTML = '<li style="padding:12px;color:var(--text-muted);font-size:13px">No hay archivos</li>';
             return;
         }
-        
         elements.filesList.innerHTML = state.files.map(file => `
             <li class="file-item" data-id="${file.id}">
                 <div class="file-icon ${file.type === 'application/pdf' ? 'pdf' : ''}">
@@ -493,28 +337,32 @@
                     <div class="file-name">${escapeHtml(file.name)}</div>
                     <div class="file-size">${formatFileSize(file.size)}</div>
                 </div>
-                <button class="file-download" onclick="event.stopPropagation(); downloadFile('${file.id}')" title="Descargar">
+                <button class="file-download" onclick="event.stopPropagation(); downloadFile('${file.id}')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
+                        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                 </button>
             </li>
         `).join('');
     }
 
-    // ========================================
-    // NOTE OPERATIONS
-    // ========================================
+    function updateSaveStatus(status) {
+        elements.saveStatus.className = 'save-status ' + status;
+        elements.saveStatus.textContent = status === 'saved' ? '✓ Guardado' : '';
+    }
+
+    function updateWordCount() {
+        const content = elements.noteContent.value;
+        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+        elements.wordCount.textContent = `${words} palabra${words !== 1 ? 's' : ''}`;
+        elements.charCount.textContent = `${content.length} caracteres`;
+    }
+
+    // ========== NOTE OPERATIONS ==========
     function createNewNote() {
         const now = new Date().toISOString();
-        state.currentNote = {
-            id: generateId(),
-            title: '', subject: '', tags: [], content: '',
-            createdAt: now, modifiedAt: now
-        };
-        
+        state.currentNote = { id: generateId(), title: '', subject: '', tags: [], content: '', createdAt: now, modifiedAt: now };
         state.notes.unshift(state.currentNote);
         openEditor();
         renderNotes();
@@ -532,61 +380,30 @@
     function openEditor() {
         elements.notesView.classList.add('hidden');
         elements.editorView.classList.remove('hidden');
-        
         elements.noteTitle.value = state.currentNote?.title || '';
         elements.noteSubject.value = state.currentNote?.subject || '';
         elements.noteTags.value = (state.currentNote?.tags || []).join(', ');
         elements.noteContent.value = state.currentNote?.content || '';
-        
         updateWordCount();
         elements.noteTitle.focus();
     }
 
     function closeEditor() {
-        if (state.currentNote) {
-            saveCurrentNote();
-        }
-        
+        if (state.currentNote) saveCurrentNote();
         elements.editorView.classList.add('hidden');
         elements.notesView.classList.remove('hidden');
         state.currentNote = null;
-        
         renderNotes();
     }
 
-    function updateWordCount() {
-        const content = elements.noteContent.value;
-        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-        elements.wordCount.textContent = `${words} palabra${words !== 1 ? 's' : ''}`;
-        elements.charCount.textContent = `${content.length} caracter${content.length !== 1 ? 'es' : ''}`;
-    }
-
-    function exportNote(noteId) {
-        const note = state.notes.find(n => n.id === noteId);
-        if (!note) return;
-        
-        const content = `# ${note.title || 'Sin título'}\n${note.subject ? `**Materia:** ${note.subject}\n` : ''}${note.tags?.length ? `**Etiquetas:** ${note.tags.join(', ')}\n` : ''}\n---\n\n${note.content || ''}`;
-        
-        const blob = new Blob([content], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${note.title || 'nota'}.md`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    // ========================================
-    // EVENT HANDLERS
-    // ========================================
-    function setupEventListeners() {
+    // ========== EVENTS ==========
+    function setupEvents() {
         elements.sidebarToggle.addEventListener('click', () => {
-            const isMobile = window.innerWidth <= 900;
-            if (isMobile) elements.sidebar.classList.toggle('open');
-            else elements.sidebar.classList.toggle('collapsed');
+            elements.sidebar.classList.toggle('collapsed');
         });
 
         elements.newNoteBtn.addEventListener('click', createNewNote);
+        elements.exportBtn.addEventListener('click', exportAll);
         elements.fileInput.addEventListener('change', handleFileUpload);
         
         const uploadZone = document.getElementById('uploadZone');
@@ -607,12 +424,7 @@
         elements.noteTags.addEventListener('input', saveCurrentNote);
         elements.noteContent.addEventListener('input', saveCurrentNote);
         
-        elements.saveNoteBtn.addEventListener('click', () => {
-            saveCurrentNote();
-            syncToMongo();
-            showToast('Nota guardada', 'success');
-        });
-        
+        elements.saveNoteBtn.addEventListener('click', () => { saveCurrentNote(); saveData(); showToast('Guardado', 'success'); });
         elements.backBtn.addEventListener('click', closeEditor);
         
         elements.deleteNoteBtn.addEventListener('click', () => elements.deleteModal.classList.remove('hidden'));
@@ -620,90 +432,34 @@
         elements.cancelDeleteBtn.addEventListener('click', () => elements.deleteModal.classList.add('hidden'));
         elements.confirmDeleteBtn.addEventListener('click', () => {
             elements.deleteModal.classList.add('hidden');
-            if (state.currentNote) {
-                const noteId = state.currentNote.id;
-                closeEditor();
-                deleteNote(noteId);
-            }
+            if (state.currentNote) { const id = state.currentNote.id; closeEditor(); deleteNote(id); }
         });
         
-        elements.syncBtn.addEventListener('click', () => { syncToMongo(); loadNotes(); });
-        
-        elements.settingsBtn.addEventListener('click', () => {
-            if (confirm('¿Cambiar conexión de MongoDB?')) {
-                MongoDBManager.logout();
-                localStorage.removeItem('notes_sync_local');
-                elements.authModal.classList.remove('hidden');
-            }
-        });
-        
-        elements.closeAuthModal.addEventListener('click', () => elements.authModal.classList.add('hidden'));
-        elements.connectBtn.addEventListener('click', handleAuth);
-        elements.authModal.addEventListener('click', e => { if (e.target === elements.authModal) elements.authModal.classList.add('hidden'); });
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
             if (e.key === 'Escape' && !elements.editorView.classList.contains('hidden')) closeEditor();
         });
-
-        window.addEventListener('resize', () => {
-            if (window.innerWidth > 900) elements.sidebar.classList.remove('open');
-        });
     }
 
-    async function handleAuth() {
-        const uri = elements.githubToken.value.trim();
-        if (!uri) { showAuthError('Ingresa el Connection String'); return; }
-        
-        if (!uri.startsWith('mongodb')) {
-            showAuthError('Connection String de MongoDB inválido');
-            return;
-        }
-        
-        elements.connectBtn.disabled = true;
-        elements.connectBtn.textContent = 'Conectando...';
-        
-        try {
-            const success = await MongoDBManager.testConnection(uri);
-            if (!success) throw new Error('Conexión fallida');
-            
-            MongoDBManager.setConnection(uri);
-            elements.authModal.classList.add('hidden');
-            elements.githubToken.value = '';
-            elements.authError.classList.add('hidden');
-            showToast('Conectado a MongoDB', 'success');
-            await loadNotes();
-        } catch (error) {
-            showAuthError(error.message);
-        } finally {
-            elements.connectBtn.disabled = false;
-            elements.connectBtn.textContent = 'Conectar';
-        }
-    }
-
-    function showAuthError(msg) {
-        elements.authError.classList.remove('hidden');
-        elements.authErrorText.textContent = msg;
-    }
-
-    // ========================================
-    // INITIALIZATION
-    // ========================================
-    async function init() {
+    // ========== INIT ==========
+    function init() {
         initElements();
-        MongoDBManager.init();
-        setupEventListeners();
+        setupEvents();
         
         window.downloadFile = downloadFile;
-        window.exportNote = exportNote;
         
-        if (!MongoDBManager.isAuthenticated()) {
-            elements.authModal.classList.remove('hidden');
-            return;
+        if (!loadData()) {
+            state.notes = [];
+            state.files = [];
         }
         
-        await loadNotes();
+        extractSubjects();
+        renderNotes();
+        renderSubjects();
+        renderFiles();
+        showToast('Notas cargadas', 'success');
     }
 
     document.addEventListener('DOMContentLoaded', init);

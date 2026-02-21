@@ -1007,7 +1007,7 @@ body {
     min-height: 0;
 }
 
-.note-content-input {
+.note-content-input, textarea#noteContent {
     flex: 1;
     padding: 20px;
     background: var(--bg-card);
@@ -1050,7 +1050,7 @@ body {
     opacity: 0.5;
 }
 
-/* Buttons */
+.btn-export { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; cursor: pointer; transition: var(--transition); } .btn-export:hover { color: var(--accent-primary); background: rgba(129, 140, 248, 0.1); border-color: var(--accent-primary); } .btn-export svg { width: 18px; height: 18px; } /* Buttons */
 .btn-primary {
     display: inline-flex;
     align-items: center;
