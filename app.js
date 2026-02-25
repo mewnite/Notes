@@ -700,6 +700,60 @@
     // Authentication via modal removed — connection managed via settings prompt or backend defaults
 
     // ========================================
+    // WEBSOCKET - Real-time sync
+    // ========================================
+    let socket = null;
+    let wsReconnectTimer = null;
+    
+    function initWebSocket() {
+        // Connect to WebSocket server
+        const wsUrl = window.location.protocol === 'https:' ? 'wss://' + window.location.host : 'ws://' + window.location.host;
+        socket = io();
+        
+        socket.on('connect', () => {
+            console.log('WebSocket connected:', socket.id);
+            updateSyncStatus('connected');
+            showToast('Conectado en tiempo real', 'success');
+            if (wsReconnectTimer) {
+                clearTimeout(wsReconnectTimer);
+                wsReconnectTimer = null;
+            }
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('WebSocket disconnected');
+            updateSyncStatus('offline');
+            showToast('Conexión perdida - Modo offline', 'error');
+            // Try to reconnect
+            wsReconnectTimer = setTimeout(initWebSocket, 3000);
+        });
+        
+        socket.on('connected', (data) => {
+            console.log('WebSocket handshake complete:', data);
+        });
+        
+        // Listen for note changes from other clients
+        socket.on('notesChanged', async (event) => {
+            console.log('Notes changed:', event.action, event.data);
+            
+            // Don't reload if we're the ones making the change
+            // The server broadcasts to ALL clients including sender
+            // So we need to check if this is our own change or from another client
+            
+            // For now, always reload to stay in sync
+            // The debounce in loadNotes will prevent rapid reloads
+            if (MongoDBManager.isAuthenticated()) {
+                await loadNotes();
+                showToast('Notas actualizadas desde otro dispositivo', 'info');
+            }
+        });
+        
+        socket.on('error', (error) => {
+            console.error('WebSocket error:', error);
+        });
+    }
+    
+    // ========================================
     // INITIALIZATION
     // ========================================
     async function init() {
@@ -724,6 +778,8 @@
         // Try to connect to MongoDB if credentials exist
         if (MongoDBManager.isAuthenticated()) {
             await loadNotes();
+            // Initialize WebSocket for real-time sync
+            initWebSocket();
         }
     }
 
