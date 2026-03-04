@@ -102,6 +102,20 @@
             </div>
 
             <div class="sidebar-footer">
+                <div class="user-info hidden" id="userInfo">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">Usuario</span>
+                        <span class="user-email" id="userEmail">user@example.com</span>
+                    </div>
+                    <button class="btn-icon" id="logoutBtn" title="Cerrar Sesión">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
                 <div class="sync-status" id="syncStatus">
                     <div class="sync-indicator"></div>
                     <span class="sync-text">Conectando...</span>
@@ -230,8 +244,9 @@
                         </div>
                     </div>
 
-                    <div class="content-area">
-                        <textarea id="noteContent" placeholder="Escribe tus notas aquí...\n\nTambién puedes usar markdown para dar formato."></textarea>
+                    <div class="content-area">                        <div class="editor-toolbar">                          <button class="toolbar-btn" id="mathKeyboardBtn" title="Teclado Matemático">S p</button>                            <button class="toolbar-btn" id="drawModeBtn">🖊️</button>                            <button class="toolbar-btn" id="clearDrawingBtn">🗑️</button>
+                            <button class="toolbar-btn" id="graphModeBtn" title="Graficar funciones">📈</button>                        </div>
+                        <canvas id="drawingCanvas" class="drawing-canvas hidden"></canvas>                        <textarea id="noteContent" placeholder="Escribe tus notas aquí...\nTambién puedes usar markdown para dar formato."></textarea>
                         <div class="editor-hint" id="editorHint">
                             <span>Atajos:</span>
                             <span class="kbd">Ctrl/Cmd + Enter</span>
@@ -254,6 +269,55 @@
     </div>
 
     <!-- MongoDB Setup removed — connection handled via backend or settings prompt -->
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2 class="modal-title" id="authModalTitle">Iniciar Sesión</h2>
+                <button class="btn-icon modal-close" id="closeAuthModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Login Form -->
+                <form id="loginForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Contraseña</label>
+                        <input type="password" id="loginPassword" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full" id="loginBtn">Iniciar Sesión</button>
+                </form>
+                <!-- Register Form -->
+                <form id="registerForm" class="auth-form hidden">
+                    <div class="form-group">
+                        <label for="registerName">Nombre</label>
+                        <input type="text" id="registerName" required placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Contraseña</label>
+                        <input type="password" id="registerPassword" required placeholder="••••••••" minlength="6">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full" id="registerBtn">Crear Cuenta</button>
+                </form>
+                <p class="auth-switch">
+                    <span id="authSwitchText">¿No tienes cuenta?</span>
+                    <a href="#" id="authSwitchBtn">Regístrate</a>
+                </p>
+            </div>
+        </div>
+    </div>
 
     <!-- Delete Confirmation Modal -->
     <div class="modal-overlay hidden" id="deleteModal">
@@ -282,6 +346,12 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="mongodb.js"></script>
-    <script src="app.js"></script>
+    <script src="math-keyboard.js"></script>
+    <script src="drawing-canvas.js"></script>
+    <script src="graph-tool.js"></script>
+    <script src="math-tools.js"></script>\n    <script src="app.js"></script>
 </body>
 </html>
+
+
+

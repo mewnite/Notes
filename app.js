@@ -73,14 +73,39 @@
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
         
-        // authentication modal removed — connection is handled via backend
+        // authentication modal
+        elements.authModal = document.getElementById('authModal');
+        elements.closeAuthModal = document.getElementById('closeAuthModal');
+        elements.loginForm = document.getElementById('loginForm');
+        elements.registerForm = document.getElementById('registerForm');
+        elements.authSwitchBtn = document.getElementById('authSwitchBtn');
+        elements.authSwitchText = document.getElementById('authSwitchText');
+        elements.authModalTitle = document.getElementById('authModalTitle');
+        elements.loginBtn = document.getElementById('loginBtn');
+        elements.registerBtn = document.getElementById('registerBtn');
         
+        // login form fields
+        elements.loginEmail = document.getElementById('loginEmail');
+        elements.loginPassword = document.getElementById('loginPassword');
+        
+        // register form fields
+        elements.registerName = document.getElementById('registerName');
+        elements.registerEmail = document.getElementById('registerEmail');
+        elements.registerPassword = document.getElementById('registerPassword');
+
         elements.deleteModal = document.getElementById('deleteModal');
         elements.closeDeleteModal = document.getElementById('closeDeleteModal');
         elements.cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
         elements.confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
         
         elements.toastContainer = document.getElementById('toastContainer');
+        
+        // User info elements
+        elements.userInfo = document.getElementById('userInfo');
+        elements.userAvatar = document.getElementById('userAvatar');
+        elements.userName = document.getElementById('userName');
+        elements.userEmail = document.getElementById('userEmail');
+        elements.logoutBtn = document.getElementById('logoutBtn');
     }
 
     // ========================================
@@ -255,7 +280,7 @@
         
         state.currentNote.title = elements.noteTitle.value.trim();
         state.currentNote.subject = elements.noteSubject.value.trim();
-        state.currentNote.content = elements.noteContent.value;
+        state.currentNote.content = elements.noteContent.value;    
         
         const tagsStr = elements.noteTags.value;
         state.currentNote.tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
@@ -398,6 +423,18 @@
         elements.syncStatus.className = 'sync-status ' + status;
         const texts = { syncing: 'Sincronizando...', synced: 'Conectado', error: 'Sin conexión', offline: 'Modo offline' };
         elements.syncStatus.querySelector('.sync-text').textContent = texts[status] || 'Listo';
+    }
+    
+    function updateUserInfo() {
+        const user = MongoDBManager.getUser();
+        if (user) {
+            elements.userInfo.classList.remove('hidden');
+            elements.userName.textContent = user.name || user.email.split('@')[0];
+            elements.userEmail.textContent = user.email;
+            elements.userAvatar.textContent = (user.name || user.email.charAt(0)).toUpperCase().charAt(0);
+        } else {
+            elements.userInfo.classList.add('hidden');
+        }
     }
 
     function updateSaveStatus(status) {
@@ -665,27 +702,99 @@
         });
         
         elements.settingsBtn.addEventListener('click', async () => {
-            if (confirm('¿Cambiar la URL del backend API?')) {
-                const uri = prompt('Pega la URL del backend API (ej. https://notes-ekmk.onrender.com). Deja vacío para desconectar:');
-                if (uri === null) return; // cancel
-                if (uri.trim() === '') {
+            if (MongoDBManager.isAuthenticated()) {
+                if (confirm('¿Cerrar sesión? Tus notas locales se mantendrán.')) {
                     MongoDBManager.logout();
+                    elements.userInfo.classList.add('hidden');
                     updateSyncStatus('offline');
-                    showToast('Conexión eliminada. Modo offline activo.', 'info');
-                    return;
+                    elements.authModal.classList.remove('hidden');
+                    showToast('Sesión cerrada. Tus notas están guardadas localmente.', 'info');
                 }
-                try {
-                    const ok = await MongoDBManager.testConnection(uri);
-                    if (!ok) throw new Error('Conexión fallida');
-                    MongoDBManager.setConnection(uri);
-                    showToast('Conexión actualizada', 'success');
-                    await loadNotes();
-                } catch (e) {
-                    showToast('Conexión inválida: ' + (e.message || e), 'error');
-                }
+            } else {
+                elements.authModal.classList.remove('hidden');
+            }
+        });
+        
+        elements.logoutBtn.addEventListener('click', () => {
+            if (confirm('¿Cerrar sesión? Tus notas locales se mantendrán.')) {
+                MongoDBManager.logout();
+                elements.userInfo.classList.add('hidden');
+                updateSyncStatus('offline');
+                elements.authModal.classList.remove('hidden');
+                showToast('Sesión cerrada. Tus notas están guardadas localmente.', 'info');
             }
         });
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
+        
+        // Auth modal event listeners
+        elements.closeAuthModal.addEventListener('click', () => {
+            // Don't close if already logged in
+            if (!MongoDBManager.isAuthenticated()) {
+                // Allow closing but show again on next action
+            }
+            elements.authModal.classList.add('hidden');
+        });
+        
+        elements.authSwitchBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const isLogin = !elements.loginForm.classList.contains('hidden');
+            if (isLogin) {
+                // Switch to register
+                elements.loginForm.classList.add('hidden');
+                elements.registerForm.classList.remove('hidden');
+                elements.authModalTitle.textContent = 'Crear Cuenta';
+                elements.authSwitchText.textContent = '¿Ya tienes cuenta?';
+                elements.authSwitchBtn.textContent = 'Inicia Sesión';
+            } else {
+                // Switch to login
+                elements.registerForm.classList.add('hidden');
+                elements.loginForm.classList.remove('hidden');
+                elements.authModalTitle.textContent = 'Iniciar Sesión';
+                elements.authSwitchText.textContent = '¿No tienes cuenta?';
+                elements.authSwitchBtn.textContent = 'Regístrate';
+            }
+        });
+        
+        elements.loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = elements.loginEmail.value;
+            const password = elements.loginPassword.value;
+            elements.loginBtn.disabled = true;
+            elements.loginBtn.textContent = 'Iniciando...';
+            try {
+                await MongoDBManager.login(email, password);
+                elements.authModal.classList.add('hidden');
+                showToast('¡Bienvenido de nuevo!', 'success');
+                await loadNotes();
+                initWebSocket();
+            } catch (err) {
+                showToast(err.message || 'Error al iniciar sesión', 'error');
+            } finally {
+                elements.loginBtn.disabled = false;
+                elements.loginBtn.textContent = 'Iniciar Sesión';
+            }
+        });
+        
+        elements.registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = elements.registerName.value;
+            const email = elements.registerEmail.value;
+            const password = elements.registerPassword.value;
+            elements.registerBtn.disabled = true;
+            elements.registerBtn.textContent = 'Creando...';
+            try {
+                await MongoDBManager.register(name, email, password);
+                elements.authModal.classList.add('hidden');
+                showToast('¡Cuenta creada! Tus notas están sincronizadas.', 'success');
+                await loadNotes();
+                initWebSocket();
+            } catch (err) {
+                showToast(err.message || 'Error al crear cuenta', 'error');
+            } finally {
+                elements.registerBtn.disabled = false;
+                elements.registerBtn.textContent = 'Crear Cuenta';
+            }
+        });
         
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
@@ -771,15 +880,19 @@
         renderSubjects();
         renderFiles();
         
-        // Show offline status
-        updateSyncStatus('offline');
-        showToast('Modo offline - Tus notas están guardadas localmente', 'info');
-        
-        // Try to connect to MongoDB if credentials exist
+        // Check if user is authenticated
         if (MongoDBManager.isAuthenticated()) {
+            // User is logged in - sync notes
+            updateSyncStatus('connected');
+            updateUserInfo();
+            showToast('Sincronizando tus notas...', 'info');
             await loadNotes();
-            // Initialize WebSocket for real-time sync
             initWebSocket();
+        } else {
+            // Show auth modal for login/signup
+            updateSyncStatus('offline');
+            elements.authModal.classList.remove('hidden');
+            showToast('Inicia sesión para sincronizar tus notas', 'info');
         }
     }
 
