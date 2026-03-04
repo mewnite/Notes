@@ -270,11 +270,11 @@
 
     <!-- MongoDB Setup removed — connection handled via backend or settings prompt -->
 
-    <!-- Auth Modal -->
+    <!-- MongoDB Connection Modal -->
     <div class="modal-overlay" id="authModal">
         <div class="modal modal-sm">
             <div class="modal-header">
-                <h2 class="modal-title" id="authModalTitle">Iniciar Sesión</h2>
+                <h2 class="modal-title" id="authModalTitle">Conectar a MongoDB</h2>
                 <button class="btn-icon modal-close" id="closeAuthModal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -283,38 +283,26 @@
                 </button>
             </div>
             <div class="modal-body">
-                <!-- Login Form -->
-                <form id="loginForm" class="auth-form">
-                    <div class="form-group">
-                        <label for="loginEmail">Email</label>
-                        <input type="email" id="loginEmail" required placeholder="tu@email.com">
-                    </div>
-                    <div class="form-group">
-                        <label for="loginPassword">Contraseña</label>
-                        <input type="password" id="loginPassword" required placeholder="••••••••">
-                    </div>
-                    <button type="submit" class="btn-primary btn-full" id="loginBtn">Iniciar Sesión</button>
-                </form>
-                <!-- Register Form -->
-                <form id="registerForm" class="auth-form hidden">
-                    <div class="form-group">
-                        <label for="registerName">Nombre</label>
-                        <input type="text" id="registerName" required placeholder="Tu nombre">
-                    </div>
-                    <div class="form-group">
-                        <label for="registerEmail">Email</label>
-                        <input type="email" id="registerEmail" required placeholder="tu@email.com">
-                    </div>
-                    <div class="form-group">
-                        <label for="registerPassword">Contraseña</label>
-                        <input type="password" id="registerPassword" required placeholder="••••••••" minlength="6">
-                    </div>
-                    <button type="submit" class="btn-primary btn-full" id="registerBtn">Crear Cuenta</button>
-                </form>
-                <p class="auth-switch">
-                    <span id="authSwitchText">¿No tienes cuenta?</span>
-                    <a href="#" id="authSwitchBtn">Regístrate</a>
+                <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 14px;">
+                    Ingresa tu connection string de MongoDB Atlas para conectar tus notas.
                 </p>
+                <form id="mongoConnectForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="connectionString">Connection String</label>
+                        <input type="text" id="connectionString" required placeholder="mongodb+srv://usuario:password@cluster...">
+                    </div>
+                    <div class="form-group">
+                        <label for="mongoUserName">Nombre de Usuario</label>
+                        <input type="text" id="mongoUserName" required placeholder="Tu nombre">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full" id="connectBtn">Conectar</button>
+                </form>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
+                    <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                        <strong>¿No tienes MongoDB?</strong><br>
+                        <a href="https://www.mongodb.com/cloud/atlas" target="_blank" style="color: var(--accent-primary);">Crea una cuenta gratuita</a> en MongoDB Atlas y obtén tu connection string.
+                    </p>
+                </div>
             </div>
         </div>
     </div>
@@ -344,7 +332,6 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script src="mongodb.js"></script>
     <script src="math-keyboard.js"></script>
     <script src="drawing-canvas.js"></script>

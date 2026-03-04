@@ -73,14 +73,13 @@
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
         
-        // authentication modal
+        // MongoDB connection modal
         elements.authModal = document.getElementById('authModal');
         elements.closeAuthModal = document.getElementById('closeAuthModal');
         elements.mongoConnectForm = document.getElementById('mongoConnectForm');
         elements.connectionString = document.getElementById('connectionString');
-        elements.userName = document.getElementById('userName');
+        elements.mongoUserName = document.getElementById('mongoUserName');
         elements.connectBtn = document.getElementById('connectBtn');
-        elements.authSwitchText = document.getElementById('authSwitchText');
         elements.authModalTitle = document.getElementById('authModalTitle');
 
         elements.deleteModal = document.getElementById('deleteModal');
@@ -729,7 +728,7 @@
         elements.mongoConnectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const connString = elements.connectionString.value;
-            const userData = { name: elements.userName.value };
+            const userData = { name: elements.mongoUserName.value };
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
@@ -841,6 +840,7 @@
             updateUserInfo();
             showToast('Cargando tus notas...', 'info');
             await loadNotes();
+            // WebSocket removed - using local storage only
         } else {
             // Show connection modal
             updateSyncStatus('offline');
