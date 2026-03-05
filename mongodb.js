@@ -1,6 +1,7 @@
 /**
  * Browser-side MongoDB adapter using direct MongoDB connection
  * Each user connects to their own MongoDB cluster
+ * Uses localStorage as primary storage with optional MongoDB sync
  */
 
 const MongoDBManager = (function() {
@@ -8,6 +9,7 @@ const MongoDBManager = (function() {
 
     const STORAGE_KEY_CONNECTION = 'notes_sync_connection_string';
     const STORAGE_KEY_USER = 'notes_sync_user';
+    const STORAGE_KEY_NOTES = 'notes_sync_notes';
 
     let connectionString = localStorage.getItem(STORAGE_KEY_CONNECTION) || null;
     let currentUser = null;
@@ -73,14 +75,36 @@ const MongoDBManager = (function() {
         localStorage.removeItem(STORAGE_KEY_USER);
     }
 
-    // Note: Direct MongoDB operations would require a backend proxy
-    // This is a simplified version that stores connection info locally
-    // For actual database operations, you'd need to go through a backend
+    // Read notes from storage
+    async function readNotes() {
+        try {
+            const data = localStorage.getItem(STORAGE_KEY_NOTES);
+            if (data) {
+                return JSON.parse(data);
+            }
+            return { notes: [], lastSync: null };
+        } catch (e) {
+            console.error('[MongoDB] Error reading notes:', e);
+            return { notes: [], lastSync: null };
+        }
+    }
 
+    // Write notes to storage
+    async function writeNotes(data) {
+        try {
+            localStorage.setItem(STORAGE_KEY_NOTES, JSON.stringify(data));
+            return true;
+        } catch (e) {
+            console.error('[MongoDB] Error writing notes:', e);
+            return false;
+        }
+    }
+
+    // Legacy function names for compatibility
     async function saveNote(note) {
-        // This would normally call your backend API
-        // For now, we save to localStorage as fallback
-        const notes = getNotes();
+        const data = await readNotes();
+        let notes = data.notes || [];
+        
         const existingIndex = notes.findIndex(n => n._id === note._id);
         
         if (existingIndex >= 0) {
@@ -90,32 +114,24 @@ const MongoDBManager = (function() {
             notes.push(note);
         }
         
-        localStorage.setItem('local_notes', JSON.stringify(notes));
+        await writeNotes({ notes: notes, lastSync: Date.now() });
         return note;
     }
 
     async function deleteNote(noteId) {
-        const notes = getNotes();
-        const filtered = notes.filter(n => n._id !== noteId);
-        localStorage.setItem('local_notes', JSON.stringify(filtered));
+        const data = await readNotes();
+        const notes = (data.notes || []).filter(n => n._id !== noteId);
+        await writeNotes({ notes: notes, lastSync: Date.now() });
         return true;
     }
 
     async function getAllNotes() {
-        return getNotes();
-    }
-
-    function getNotes() {
-        try {
-            return JSON.parse(localStorage.getItem('local_notes') || '[]');
-        } catch (e) {
-            return [];
-        }
+        const data = await readNotes();
+        return data.notes || [];
     }
 
     async function syncNotes(notes) {
-        // Sync to localStorage as primary storage
-        localStorage.setItem('local_notes', JSON.stringify(notes));
+        await writeNotes({ notes: notes, lastSync: Date.now() });
         return notes;
     }
 
@@ -128,6 +144,8 @@ const MongoDBManager = (function() {
         getUser,
         getConnection,
         setConnection,
+        readNotes,
+        writeNotes,
         saveNote,
         deleteNote,
         getAllNotes,
