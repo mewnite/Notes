@@ -61,5 +61,15 @@ window.MathTools = {
                 GraphTool.plot();
             }
         }
+    },
+    
+    // Image export functions
+    // generateImage removed: generation is automatic now
+    downloadImage: function() {
+        if (typeof MathToImage !== 'undefined') MathToImage.download();
+    },
+    copyImageToClipboard: function() {
+        if (typeof MathToImage !== 'undefined') return MathToImage.copyToClipboard();
+        return false;
     }
 };

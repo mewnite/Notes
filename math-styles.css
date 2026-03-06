@@ -1,0 +1,85 @@
+/* Math Image Rendering - Add to style.css */
+.math-render-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60px;
+}
+
+.math-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 255, 136, 0.2);
+}
+
+.math-fallback {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.math-expr {
+    padding: 8px 16px;
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 6px;
+    color: #00ff88;
+    font-size: 1.2em;
+}
+
+/* KaTeX Math Rendering */
+.math-preview {
+    display: none;
+    padding: 16px 20px;
+    margin-top: 12px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 12px;
+    min-height: 60px;
+    overflow-x: auto;
+}
+
+.math-preview.visible {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+.math-line {
+    padding: 4px 0;
+    line-height: 1.8;
+}
+
+.math-inline {
+    display: inline-block;
+    padding: 0 2px;
+}
+
+.math-symbol {
+    margin: 0 2px;
+}
+
+/* KaTeX overrides for dark theme */
+.math-preview .katex {
+    color: #e0e0e0;
+    font-size: 1.1em;
+}
+
+.math-preview .katex .mord {
+    color: #00ff88;
+}
+
+.math-preview .katex .mbin,
+.math-preview .katex .mrel {
+    color: #ffd93d;
+}
+
+.math-preview .katex .mop {
+    color: #a29bfe;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
