@@ -727,14 +727,19 @@
         // MongoDB Connection Form
         elements.mongoConnectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const connString = elements.connectionString.value;
-            const userData = { name: elements.mongoUserName.value };
+            const connString = elements.connectionString.value.trim();
+            const remember = document.getElementById('rememberConn')?.checked;
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
-                await MongoDBManager.connect(connString, userData);
+                // Validación simple del formato mongodb+srv://
+                if (!/^mongodb\+srv:\/\//.test(connString)) {
+                    throw new Error('La cadena debe iniciar con mongodb+srv://');
+                }
+                // Guardar (cifrado si se marca recordar)
+                await MongoDBManager.connect(connString, { user: { name: 'Usuario' }, remember });
                 elements.authModal.classList.add('hidden');
-                showToast('¡Conectado a MongoDB!', 'success');
+                showToast('¡Cadena de conexión guardada!', 'success');
                 await loadNotes();
             } catch (err) {
                 showToast(err.message || 'Error al conectar', 'error');
@@ -835,12 +840,10 @@
         
         // Check if user is connected to MongoDB
         if (MongoDBManager.isConnected()) {
-            // User is connected - load notes
             updateSyncStatus('connected');
             updateUserInfo();
             showToast('Cargando tus notas...', 'info');
             await loadNotes();
-            // WebSocket removed - using local storage only
         } else {
             // Show connection modal
             updateSyncStatus('offline');

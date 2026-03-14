@@ -201,6 +201,58 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/', (req, res) => res.json({ status: 'ok', websocket: 'available', auth: 'enabled' }));
 
+// Simple device-based sync (no JWT required)
+// Device key is stored in notes as 'deviceKey' field
+app.get('/api/notes', async (req, res) => {
+  try {
+    const deviceKey = req.query.deviceKey || req.headers['x-device-key'];
+    if (!deviceKey) {
+      return res.status(401).json({ error: 'Device key required' });
+    }
+    
+    const notes = await notesCollection.find({ deviceKey }).toArray();
+    res.json({ notes });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/notes', async (req, res) => {
+  try {
+    const deviceKey = req.query.deviceKey || req.headers['x-device-key'];
+    if (!deviceKey) {
+      return res.status(401).json({ error: 'Device key required' });
+    }
+    
+    const { notes } = req.body || {};
+    if (!Array.isArray(notes)) {
+      return res.status(400).json({ error: 'Notes array required' });
+    }
+    
+    // Delete existing notes for this device
+    await notesCollection.deleteMany({ deviceKey });
+    
+    // Insert new notes
+    if (notes.length > 0) {
+      const notesToInsert = notes.map(n => ({
+        deviceKey,
+        id: n.id || 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        title: n.title || 'Sin título',
+        subject: n.subject || '',
+        tags: n.tags || [],
+        content: n.content || '',
+        createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+        modifiedAt: n.modifiedAt ? new Date(n.modifiedAt) : new Date()
+      }));
+      await notesCollection.insertMany(notesToInsert);
+    }
+    
+    res.json({ ok: true, count: notes.length });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Get all notes for authenticated user
 app.get('/notes', authenticateToken, async (req, res) => {
   try {
