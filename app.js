@@ -727,25 +727,12 @@
         // MongoDB Connection Form
         elements.mongoConnectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const serverUrl = elements.connectionString.value.trim();  // Server URL
-            const mongoConnString = elements.mongoUserName.value.trim();  // MongoDB connection string
-            const remember = elements.rememberConnection ? elements.rememberConnection.checked : false;  // Remember preference
+            const connString = elements.connectionString.value;
+            const userData = { name: elements.mongoUserName.value };
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
-                // Validar formato del servidor
-                if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-                    throw new Error('La URL del servidor debe iniciar con http:// o https://');
-                }
-                // Validar formato de MongoDB
-                if (!mongoConnString.startsWith('mongodb+srv://') && !mongoConnString.startsWith('mongodb://')) {
-                    throw new Error('La cadena de MongoDB debe iniciar con mongodb+srv:// o mongodb://');
-                }
-                // Configurar servidor y conectar
-                MongoDBManager.setServerUrl(serverUrl);
-                await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
-                // Guardar preferencia de recordar
-                MongoDBManager.setRemember(remember);
+                await MongoDBManager.connect(connString, userData);
                 elements.authModal.classList.add('hidden');
                 showToast('¡Conectado a MongoDB!', 'success');
                 await loadNotes();
@@ -846,29 +833,19 @@
         renderSubjects();
         renderFiles();
         
-        // Auto-connect to MongoDB with fixed configuration
-        try {
-            const serverUrl = 'https://notes-ekmk.onrender.com';
-            const mongoConnString = 'mongodb+srv://notesuser:YTUAfrXk93dGexMf@notessync.tjyuvhc.mongodb.net/?appName=notessync';
-            
-            MongoDBManager.setServerUrl(serverUrl);
-            await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
-            MongoDBManager.setRemember(true); // Always remember this connection
-            
+        // Check if user is connected to MongoDB
+        if (MongoDBManager.isConnected()) {
+            // User is connected - load notes
             updateSyncStatus('connected');
             updateUserInfo();
-            showToast('Conectado automáticamente a MongoDB', 'success');
+            showToast('Cargando tus notas...', 'info');
             await loadNotes();
-        } catch (err) {
-            console.error('Auto-connect failed:', err);
+            // WebSocket removed - using local storage only
+        } else {
+            // Show connection modal
             updateSyncStatus('offline');
-            showToast('Modo offline - notas cargadas localmente', 'info');
-            // Load from local cache when server is not available
-            loadFromLocalCache();
-            extractSubjects();
-            renderNotes();
-            renderSubjects();
-            renderFiles();
+            elements.authModal.classList.remove('hidden');
+            showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
         }
     }
 

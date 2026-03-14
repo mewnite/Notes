@@ -282,11 +282,13 @@
         </main>
     </div>
 
-    <!-- MongoDB Atlas Connection Modal -->
-    <div class="modal-overlay hidden" id="authModal">
+    <!-- MongoDB Setup removed — connection handled via backend or settings prompt -->
+
+    <!-- MongoDB Connection Modal -->
+    <div class="modal-overlay" id="authModal">
         <div class="modal modal-sm">
             <div class="modal-header">
-                <h2 class="modal-title" id="authModalTitle">Conectar a MongoDB Atlas</h2>
+                <h2 class="modal-title" id="authModalTitle">Conectar a MongoDB</h2>
                 <button class="btn-icon modal-close" id="closeAuthModal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -296,31 +298,23 @@
             </div>
             <div class="modal-body">
                 <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 14px;">
-                    Ingresa tu cadena de conexión de MongoDB Atlas (mongodb+srv://...) y, si deseas, guárdala cifrada en este dispositivo para futuras sesiones.
+                    Ingresa tu connection string de MongoDB Atlas para conectar tus notas.
                 </p>
                 <form id="mongoConnectForm" class="auth-form">
-                <div class="form-group">
-                    <label for="connectionString">URL del Servidor Node.js</label>
-                    <input type="text" id="connectionString" required placeholder="http://localhost:3000">
-                </div>
-                <div class="form-group">
-                    <label for="mongoUserName">MongoDB Connection String</label>
-                    <input type="text" id="mongoUserName" required placeholder="mongodb+srv://usuario:password@cluster...">
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="rememberConnection">
-                        Recordar esta conexión
-                    </label>
-                </div>
-                <button type="submit" class="btn-primary btn-full" id="connectBtn">Conectar</button>
+                    <div class="form-group">
+                        <label for="connectionString">Connection String</label>
+                        <input type="text" id="connectionString" required placeholder="mongodb+srv://usuario:password@cluster...">
+                    </div>
+                    <div class="form-group">
+                        <label for="mongoUserName">Nombre de Usuario</label>
+                        <input type="text" id="mongoUserName" required placeholder="Tu nombre">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full" id="connectBtn">Conectar</button>
                 </form>
                 <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
                     <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-                        <strong>¿Cómo obtener la cadena?</strong><br>
-                        1. Ve a <a href="https://www.mongodb.com/cloud/atlas" target="_blank" style="color: var(--accent-primary);">MongoDB Atlas</a><br>
-                        2. En tu cluster, usa "Connect" → "Drivers" y copia el connection string (mongodb+srv://...).<br>
-                        3. Reemplaza usuario y password si corresponde.
+                        <strong>¿No tienes MongoDB?</strong><br>
+                        <a href="https://www.mongodb.com/cloud/atlas" target="_blank" style="color: var(--accent-primary);">Crea una cuenta gratuita</a> en MongoDB Atlas y obtén tu connection string.
                     </p>
                 </div>
             </div>
@@ -359,7 +353,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
     <script src="expr-to-image.js"></script>
+    <script src="math-to-image.js"></script>
     <script src="math-tools.js"></script>
+    <script src="math-live.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
