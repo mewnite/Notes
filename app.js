@@ -729,6 +729,7 @@
             e.preventDefault();
             const serverUrl = elements.connectionString.value.trim();  // Server URL
             const mongoConnString = elements.mongoUserName.value.trim();  // MongoDB connection string
+            const remember = elements.rememberConnection.checked;  // Remember preference
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
@@ -743,6 +744,8 @@
                 // Configurar servidor y conectar
                 MongoDBManager.setServerUrl(serverUrl);
                 await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
+                // Guardar preferencia de recordar
+                MongoDBManager.setRemember(remember);
                 elements.authModal.classList.add('hidden');
                 showToast('¡Conectado a MongoDB!', 'success');
                 await loadNotes();
@@ -850,10 +853,28 @@
             showToast('Cargando tus notas...', 'info');
             await loadNotes();
         } else {
-            // Show connection modal
-            updateSyncStatus('offline');
-            elements.authModal.classList.remove('hidden');
-            showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
+            // Check if user wants to remember connection
+            if (MongoDBManager.getRemember()) {
+                // Try to auto-connect with default values
+                try {
+                    const defaultServerUrl = window.location.origin; // Use current origin as default server
+                    const defaultConnString = 'mongodb+srv://notesuser:YTUAfrXk93dGexMf@notessync.tjyuvhc.mongodb.net/?appName=notessync';
+                    MongoDBManager.setServerUrl(defaultServerUrl);
+                    await MongoDBManager.connect(defaultConnString, { name: 'Usuario' });
+                    showToast('Conectado automáticamente', 'success');
+                    await loadNotes();
+                } catch (err) {
+                    // If auto-connect fails, show modal
+                    updateSyncStatus('offline');
+                    elements.authModal.classList.remove('hidden');
+                    showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
+                }
+            } else {
+                // Show connection modal
+                updateSyncStatus('offline');
+                elements.authModal.classList.remove('hidden');
+                showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
+            }
         }
     }
 

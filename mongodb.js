@@ -10,10 +10,12 @@ const MongoDBManager = (function() {
     const STORAGE_KEY_USER = 'notes_sync_user';
     const STORAGE_KEY_NOTES = 'notes_sync_notes';
     const STORAGE_KEY_SERVER_URL = 'notes_sync_server_url';
+    const STORAGE_KEY_REMEMBER = 'notes_sync_remember';
 
     let connectionString = localStorage.getItem(STORAGE_KEY_CONNECTION) || null;
     let currentUser = null;
     let serverUrl = localStorage.getItem(STORAGE_KEY_SERVER_URL) || '';
+    let rememberConnection = localStorage.getItem(STORAGE_KEY_REMEMBER) === 'true';
 
     // Try to restore user from localStorage
     try {
@@ -57,6 +59,16 @@ const MongoDBManager = (function() {
 
     function getServerUrl() {
         return serverUrl;
+    }
+
+    // Remember connection preference
+    function setRemember(remember) {
+        rememberConnection = remember;
+        localStorage.setItem(STORAGE_KEY_REMEMBER, remember ? 'true' : 'false');
+    }
+
+    function getRemember() {
+        return rememberConnection;
     }
 
     async function connect(connString, userData) {
