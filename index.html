@@ -300,12 +300,12 @@
                 </p>
                 <form id="mongoConnectForm" class="auth-form">
                     <div class="form-group">
-                        <label for="connectionString">Cadena de conexión</label>
-                        <input type="text" id="connectionString" required placeholder="mongodb+srv://usuario:password@cluster0.xxxxx.mongodb.net/?appName=tuApp">
+                        <label for="connectionString">URL del Servidor Node.js</label>
+                        <input type="text" id="connectionString" required placeholder="http://localhost:3000">
                     </div>
-                    <div class="form-group" style="display:flex;align-items:center;gap:8px">
-                        <input type="checkbox" id="rememberConn">
-                        <label for="rememberConn" style="margin:0">Recordar en este dispositivo</label>
+                    <div class="form-group">
+                        <label for="mongoUserName">MongoDB Connection String</label>
+                        <input type="text" id="mongoUserName" required placeholder="mongodb+srv://usuario:password@cluster...">
                     </div>
                     <button type="submit" class="btn-primary btn-full" id="connectBtn">Conectar</button>
                 </form>

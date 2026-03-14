@@ -727,19 +727,24 @@
         // MongoDB Connection Form
         elements.mongoConnectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const connString = elements.connectionString.value.trim();
-            const remember = document.getElementById('rememberConn')?.checked;
+            const serverUrl = elements.connectionString.value.trim();  // Server URL
+            const mongoConnString = elements.mongoUserName.value.trim();  // MongoDB connection string
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
-                // Validación simple del formato mongodb+srv://
-                if (!/^mongodb\+srv:\/\//.test(connString)) {
-                    throw new Error('La cadena debe iniciar con mongodb+srv://');
+                // Validar formato del servidor
+                if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+                    throw new Error('La URL del servidor debe iniciar con http:// o https://');
                 }
-                // Guardar (cifrado si se marca recordar)
-                await MongoDBManager.connect(connString, { user: { name: 'Usuario' }, remember });
+                // Validar formato de MongoDB
+                if (!mongoConnString.startsWith('mongodb+srv://') && !mongoConnString.startsWith('mongodb://')) {
+                    throw new Error('La cadena de MongoDB debe iniciar con mongodb+srv:// o mongodb://');
+                }
+                // Configurar servidor y conectar
+                MongoDBManager.setServerUrl(serverUrl);
+                await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
                 elements.authModal.classList.add('hidden');
-                showToast('¡Cadena de conexión guardada!', 'success');
+                showToast('¡Conectado a MongoDB!', 'success');
                 await loadNotes();
             } catch (err) {
                 showToast(err.message || 'Error al conectar', 'error');

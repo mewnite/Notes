@@ -201,41 +201,78 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/', (req, res) => res.json({ status: 'ok', websocket: 'available', auth: 'enabled' }));
 
-// Simple device-based sync (no JWT required)
-// Device key is stored in notes as 'deviceKey' field
+// MongoDB connection string is passed from client
+// Creates a new connection for each request to allow user-provided connections
 app.get('/api/notes', async (req, res) => {
   try {
-    const deviceKey = req.query.deviceKey || req.headers['x-device-key'];
-    if (!deviceKey) {
-      return res.status(401).json({ error: 'Device key required' });
+    const connectionString = req.query.conn || req.headers['x-mongodb-conn'];
+    
+    if (!connectionString) {
+      // Fallback to server's default MongoDB if no connection provided
+      const notes = await notesCollection.find({}).toArray();
+      return res.json({ notes });
     }
     
-    const notes = await notesCollection.find({ deviceKey }).toArray();
+    // Connect to user's MongoDB
+    const userClient = new MongoClient(connectionString);
+    await userClient.connect();
+    const userDb = userClient.db();
+    const userNotesCollection = userDb.collection('notes');
+    
+    const notes = await userNotesCollection.find({}).toArray();
+    
+    await userClient.close();
+    
     res.json({ notes });
   } catch (err) {
+    console.error('Error getting notes:', err);
     res.status(500).json({ error: String(err) });
   }
 });
 
 app.post('/api/notes', async (req, res) => {
   try {
-    const deviceKey = req.query.deviceKey || req.headers['x-device-key'];
-    if (!deviceKey) {
-      return res.status(401).json({ error: 'Device key required' });
-    }
-    
+    const connectionString = req.query.conn || req.headers['x-mongodb-conn'];
     const { notes } = req.body || {};
+    
     if (!Array.isArray(notes)) {
       return res.status(400).json({ error: 'Notes array required' });
     }
     
-    // Delete existing notes for this device
-    await notesCollection.deleteMany({ deviceKey });
+    if (!connectionString) {
+      // Fallback to server's default MongoDB
+      // Delete existing notes
+      await notesCollection.deleteMany({});
+      
+      // Insert new notes
+      if (notes.length > 0) {
+        const notesToInsert = notes.map(n => ({
+          id: n.id || 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          title: n.title || 'Sin título',
+          subject: n.subject || '',
+          tags: n.tags || [],
+          content: n.content || '',
+          createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+          modifiedAt: n.modifiedAt ? new Date(n.modifiedAt) : new Date()
+        }));
+        await notesCollection.insertMany(notesToInsert);
+      }
+      
+      return res.json({ ok: true, count: notes.length });
+    }
+    
+    // Connect to user's MongoDB
+    const userClient = new MongoClient(connectionString);
+    await userClient.connect();
+    const userDb = userClient.db();
+    const userNotesCollection = userDb.collection('notes');
+    
+    // Delete existing notes
+    await userNotesCollection.deleteMany({});
     
     // Insert new notes
     if (notes.length > 0) {
       const notesToInsert = notes.map(n => ({
-        deviceKey,
         id: n.id || 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         title: n.title || 'Sin título',
         subject: n.subject || '',
@@ -244,11 +281,14 @@ app.post('/api/notes', async (req, res) => {
         createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
         modifiedAt: n.modifiedAt ? new Date(n.modifiedAt) : new Date()
       }));
-      await notesCollection.insertMany(notesToInsert);
+      await userNotesCollection.insertMany(notesToInsert);
     }
+    
+    await userClient.close();
     
     res.json({ ok: true, count: notes.length });
   } catch (err) {
+    console.error('Error saving notes:', err);
     res.status(500).json({ error: String(err) });
   }
 });
