@@ -169,7 +169,7 @@ const MongoDBManager = (function() {
             
             return await response.json();
         } catch (e) {
-            console.error('[MongoDB] Error al escribir notas:', e);
+            // Silently handle server errors, don't log to console
             throw e;
         }
     }
@@ -184,9 +184,9 @@ const MongoDBManager = (function() {
             if (isConnected()) {
                 try {
                     await writeNotesToServer(data.notes);
-                    console.log('[MongoDB] Notas guardadas en MongoDB');
+                    // Silently handle success, don't log to console
                 } catch (e) {
-                    console.log('[MongoDB] No se pudo guardar en MongoDB');
+                    // Silently handle server errors, don't log to console
                 }
             }
             
