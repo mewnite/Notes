@@ -846,35 +846,23 @@
         renderSubjects();
         renderFiles();
         
-        // Check if user is connected to MongoDB
-        if (MongoDBManager.isConnected()) {
+        // Auto-connect to MongoDB with fixed configuration
+        try {
+            const serverUrl = 'https://notes-ekmk.onrender.com';
+            const mongoConnString = 'mongodb+srv://notesuser:YTUAfrXk93dGexMf@notessync.tjyuvhc.mongodb.net/?appName=notessync';
+            
+            MongoDBManager.setServerUrl(serverUrl);
+            await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
+            MongoDBManager.setRemember(true); // Always remember this connection
+            
             updateSyncStatus('connected');
             updateUserInfo();
-            showToast('Cargando tus notas...', 'info');
+            showToast('Conectado automáticamente a MongoDB', 'success');
             await loadNotes();
-        } else {
-            // Check if user wants to remember connection
-            if (MongoDBManager.getRemember()) {
-                // Try to auto-connect with default values
-                try {
-                    const defaultServerUrl = window.location.origin; // Use current origin as default server
-                    const defaultConnString = 'mongodb+srv://notesuser:YTUAfrXk93dGexMf@notessync.tjyuvhc.mongodb.net/?appName=notessync';
-                    MongoDBManager.setServerUrl(defaultServerUrl);
-                    await MongoDBManager.connect(defaultConnString, { name: 'Usuario' });
-                    showToast('Conectado automáticamente', 'success');
-                    await loadNotes();
-                } catch (err) {
-                    // If auto-connect fails, show modal
-                    updateSyncStatus('offline');
-                    elements.authModal.classList.remove('hidden');
-                    showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
-                }
-            } else {
-                // Show connection modal
-                updateSyncStatus('offline');
-                elements.authModal.classList.remove('hidden');
-                showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
-            }
+        } catch (err) {
+            console.error('Auto-connect failed:', err);
+            updateSyncStatus('error');
+            showToast('Error al conectar a MongoDB: ' + err.message, 'error');
         }
     }
 
