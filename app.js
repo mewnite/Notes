@@ -861,8 +861,14 @@
             await loadNotes();
         } catch (err) {
             console.error('Auto-connect failed:', err);
-            updateSyncStatus('error');
-            showToast('Error al conectar a MongoDB: ' + err.message, 'error');
+            updateSyncStatus('offline');
+            showToast('Modo offline - notas cargadas localmente', 'info');
+            // Load from local cache when server is not available
+            loadFromLocalCache();
+            extractSubjects();
+            renderNotes();
+            renderSubjects();
+            renderFiles();
         }
     }
 
