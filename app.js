@@ -729,7 +729,7 @@
             e.preventDefault();
             const serverUrl = elements.connectionString.value.trim();  // Server URL
             const mongoConnString = elements.mongoUserName.value.trim();  // MongoDB connection string
-            const remember = elements.rememberConnection.checked;  // Remember preference
+            const remember = elements.rememberConnection ? elements.rememberConnection.checked : false;  // Remember preference
             elements.connectBtn.disabled = true;
             elements.connectBtn.textContent = 'Conectando...';
             try {
