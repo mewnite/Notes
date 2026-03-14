@@ -130,7 +130,8 @@ const MongoDBManager = (function() {
             
             return data.notes || [];
         } catch (e) {
-            console.error('[MongoDB] Error al leer notas:', e);
+            // Silently handle server errors, fallback to localStorage
+            // Don't log 404 errors to console to avoid spam
             
             // Fallback to localStorage
             const data = localStorage.getItem(STORAGE_KEY_NOTES);
