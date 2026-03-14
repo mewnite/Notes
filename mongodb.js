@@ -242,6 +242,8 @@ const MongoDBManager = (function() {
         setConnection,
         setServerUrl,
         getServerUrl,
+        setRemember,
+        getRemember,
         readNotes,
         writeNotes,
         saveNote,
