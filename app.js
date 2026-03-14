@@ -73,14 +73,25 @@
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
         
-        // MongoDB connection modal
+        // authentication modal
         elements.authModal = document.getElementById('authModal');
         elements.closeAuthModal = document.getElementById('closeAuthModal');
-        elements.mongoConnectForm = document.getElementById('mongoConnectForm');
-        elements.connectionString = document.getElementById('connectionString');
-        elements.mongoUserName = document.getElementById('mongoUserName');
-        elements.connectBtn = document.getElementById('connectBtn');
+        elements.loginForm = document.getElementById('loginForm');
+        elements.registerForm = document.getElementById('registerForm');
+        elements.authSwitchBtn = document.getElementById('authSwitchBtn');
+        elements.authSwitchText = document.getElementById('authSwitchText');
         elements.authModalTitle = document.getElementById('authModalTitle');
+        elements.loginBtn = document.getElementById('loginBtn');
+        elements.registerBtn = document.getElementById('registerBtn');
+        
+        // login form fields
+        elements.loginEmail = document.getElementById('loginEmail');
+        elements.loginPassword = document.getElementById('loginPassword');
+        
+        // register form fields
+        elements.registerName = document.getElementById('registerName');
+        elements.registerEmail = document.getElementById('registerEmail');
+        elements.registerPassword = document.getElementById('registerPassword');
 
         elements.deleteModal = document.getElementById('deleteModal');
         elements.closeDeleteModal = document.getElementById('closeDeleteModal');
@@ -691,13 +702,13 @@
         });
         
         elements.settingsBtn.addEventListener('click', async () => {
-            if (MongoDBManager.isConnected()) {
-                if (confirm('¿Desconectar MongoDB? Tus notas locales se mantendrán.')) {
-                    MongoDBManager.disconnect();
+            if (MongoDBManager.isAuthenticated()) {
+                if (confirm('¿Cerrar sesión? Tus notas locales se mantendrán.')) {
+                    MongoDBManager.logout();
                     elements.userInfo.classList.add('hidden');
                     updateSyncStatus('offline');
                     elements.authModal.classList.remove('hidden');
-                    showToast('Desconectado. Tus notas están guardadas localmente.', 'info');
+                    showToast('Sesión cerrada. Tus notas están guardadas localmente.', 'info');
                 }
             } else {
                 elements.authModal.classList.remove('hidden');
@@ -705,49 +716,85 @@
         });
         
         elements.logoutBtn.addEventListener('click', () => {
-            if (confirm('¿Desconectar MongoDB? Tus notas locales se mantendrán.')) {
-                MongoDBManager.disconnect();
+            if (confirm('¿Cerrar sesión? Tus notas locales se mantendrán.')) {
+                MongoDBManager.logout();
                 elements.userInfo.classList.add('hidden');
                 updateSyncStatus('offline');
                 elements.authModal.classList.remove('hidden');
-                showToast('Desconectado. Tus notas están guardadas localmente.', 'info');
+                showToast('Sesión cerrada. Tus notas están guardadas localmente.', 'info');
             }
         });
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
         // Auth modal event listeners
         elements.closeAuthModal.addEventListener('click', () => {
-            // Don't close if already connected
-            if (!MongoDBManager.isConnected()) {
+            // Don't close if already logged in
+            if (!MongoDBManager.isAuthenticated()) {
                 // Allow closing but show again on next action
             }
             elements.authModal.classList.add('hidden');
         });
         
-        // MongoDB Connection Form
-        elements.mongoConnectForm.addEventListener('submit', async (e) => {
+        elements.authSwitchBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            const connString = elements.connectionString.value;
-            const userData = { name: elements.mongoUserName.value };
-            elements.connectBtn.disabled = true;
-            elements.connectBtn.textContent = 'Conectando...';
-            try {
-                await MongoDBManager.connect(connString, userData);
-                elements.authModal.classList.add('hidden');
-                showToast('¡Conectado a MongoDB!', 'success');
-                await loadNotes();
-            } catch (err) {
-                showToast(err.message || 'Error al conectar', 'error');
-            } finally {
-                elements.connectBtn.disabled = false;
-                elements.connectBtn.textContent = 'Conectar';
+            const isLogin = !elements.loginForm.classList.contains('hidden');
+            if (isLogin) {
+                // Switch to register
+                elements.loginForm.classList.add('hidden');
+                elements.registerForm.classList.remove('hidden');
+                elements.authModalTitle.textContent = 'Crear Cuenta';
+                elements.authSwitchText.textContent = '¿Ya tienes cuenta?';
+                elements.authSwitchBtn.textContent = 'Inicia Sesión';
+            } else {
+                // Switch to login
+                elements.registerForm.classList.add('hidden');
+                elements.loginForm.classList.remove('hidden');
+                elements.authModalTitle.textContent = 'Iniciar Sesión';
+                elements.authSwitchText.textContent = '¿No tienes cuenta?';
+                elements.authSwitchBtn.textContent = 'Regístrate';
             }
         });
         
-        // Remove old login/register handlers
-        // elements.loginForm removed
-        // elements.registerForm removed
-        // elements.authSwitchBtn removed
+        elements.loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = elements.loginEmail.value;
+            const password = elements.loginPassword.value;
+            elements.loginBtn.disabled = true;
+            elements.loginBtn.textContent = 'Iniciando...';
+            try {
+                await MongoDBManager.login(email, password);
+                elements.authModal.classList.add('hidden');
+                showToast('¡Bienvenido de nuevo!', 'success');
+                await loadNotes();
+                initWebSocket();
+            } catch (err) {
+                showToast(err.message || 'Error al iniciar sesión', 'error');
+            } finally {
+                elements.loginBtn.disabled = false;
+                elements.loginBtn.textContent = 'Iniciar Sesión';
+            }
+        });
+        
+        elements.registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = elements.registerName.value;
+            const email = elements.registerEmail.value;
+            const password = elements.registerPassword.value;
+            elements.registerBtn.disabled = true;
+            elements.registerBtn.textContent = 'Creando...';
+            try {
+                await MongoDBManager.register(name, email, password);
+                elements.authModal.classList.add('hidden');
+                showToast('¡Cuenta creada! Tus notas están sincronizadas.', 'success');
+                await loadNotes();
+                initWebSocket();
+            } catch (err) {
+                showToast(err.message || 'Error al crear cuenta', 'error');
+            } finally {
+                elements.registerBtn.disabled = false;
+                elements.registerBtn.textContent = 'Crear Cuenta';
+            }
+        });
         
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
@@ -804,7 +851,7 @@
             
             // For now, always reload to stay in sync
             // The debounce in loadNotes will prevent rapid reloads
-            if (MongoDBManager.isConnected()) {
+            if (MongoDBManager.isAuthenticated()) {
                 await loadNotes();
                 showToast('Notas actualizadas desde otro dispositivo', 'info');
             }
@@ -833,19 +880,19 @@
         renderSubjects();
         renderFiles();
         
-        // Check if user is connected to MongoDB
-        if (MongoDBManager.isConnected()) {
-            // User is connected - load notes
+        // Check if user is authenticated
+        if (MongoDBManager.isAuthenticated()) {
+            // User is logged in - sync notes
             updateSyncStatus('connected');
             updateUserInfo();
-            showToast('Cargando tus notas...', 'info');
+            showToast('Sincronizando tus notas...', 'info');
             await loadNotes();
-            // WebSocket removed - using local storage only
+            initWebSocket();
         } else {
-            // Show connection modal
+            // Show auth modal for login/signup
             updateSyncStatus('offline');
             elements.authModal.classList.remove('hidden');
-            showToast('Conecta tu MongoDB para sincronizar tus notas', 'info');
+            showToast('Inicia sesión para sincronizar tus notas', 'info');
         }
     }
 

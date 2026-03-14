@@ -7,9 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="math-styles.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="description" content="Sincroniza tus notas entre Linux y Windows">
@@ -246,20 +244,8 @@
                         </div>
                     </div>
 
-                    <div class="content-area">
-                        <div class="math-preview-container" id="mathPreviewContainer">
-                            <div class="math-preview-label">Vista previa de la expresión:</div>
-                            <img id="exprImage" alt="Expr" title="Vista previa de la expresión matemática">
-                            <span id="exprPlaceholder">Escribe una fórmula (ej: sqrt(x^2+1), (a+b)/c, x^2+y^2)</span>
-                        </div>
-                        <div class="editor-toolbar">
-                            <button class="toolbar-btn" id="mathKeyboardBtn" title="Teclado Matemático">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 9h16M4 13h16M4 17h16M4 21h16"/></svg>
-                            </button>
-                            <button class="toolbar-btn" id="drawModeBtn" title="Dibujar">🖊️</button>
-                            <button class="toolbar-btn" id="graphModeBtn" title="Graficar funciones">📈</button>
-                            <button class="toolbar-btn hidden" id="clearDrawingBtn" title="Limpiar">🗑️</button>
-                        </div>
+                    <div class="content-area">                        <div class="editor-toolbar">                          <button class="toolbar-btn" id="mathKeyboardBtn" title="Teclado Matemático">S p</button>                            <button class="toolbar-btn" id="drawModeBtn">🖊️</button>                            <button class="toolbar-btn" id="clearDrawingBtn">🗑️</button>
+                            <button class="toolbar-btn" id="graphModeBtn" title="Graficar funciones">📈</button>                        </div>
                         <canvas id="drawingCanvas" class="drawing-canvas hidden"></canvas>                        <textarea id="noteContent" placeholder="Escribe tus notas aquí...\nTambién puedes usar markdown para dar formato."></textarea>
                         <div class="editor-hint" id="editorHint">
                             <span>Atajos:</span>
@@ -284,11 +270,11 @@
 
     <!-- MongoDB Setup removed — connection handled via backend or settings prompt -->
 
-    <!-- MongoDB Connection Modal -->
+    <!-- Auth Modal -->
     <div class="modal-overlay" id="authModal">
         <div class="modal modal-sm">
             <div class="modal-header">
-                <h2 class="modal-title" id="authModalTitle">Conectar a MongoDB</h2>
+                <h2 class="modal-title" id="authModalTitle">Iniciar Sesión</h2>
                 <button class="btn-icon modal-close" id="closeAuthModal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -297,26 +283,38 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 14px;">
-                    Ingresa tu connection string de MongoDB Atlas para conectar tus notas.
-                </p>
-                <form id="mongoConnectForm" class="auth-form">
+                <!-- Login Form -->
+                <form id="loginForm" class="auth-form">
                     <div class="form-group">
-                        <label for="connectionString">Connection String</label>
-                        <input type="text" id="connectionString" required placeholder="mongodb+srv://usuario:password@cluster...">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" required placeholder="tu@email.com">
                     </div>
                     <div class="form-group">
-                        <label for="mongoUserName">Nombre de Usuario</label>
-                        <input type="text" id="mongoUserName" required placeholder="Tu nombre">
+                        <label for="loginPassword">Contraseña</label>
+                        <input type="password" id="loginPassword" required placeholder="••••••••">
                     </div>
-                    <button type="submit" class="btn-primary btn-full" id="connectBtn">Conectar</button>
+                    <button type="submit" class="btn-primary btn-full" id="loginBtn">Iniciar Sesión</button>
                 </form>
-                <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
-                    <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-                        <strong>¿No tienes MongoDB?</strong><br>
-                        <a href="https://www.mongodb.com/cloud/atlas" target="_blank" style="color: var(--accent-primary);">Crea una cuenta gratuita</a> en MongoDB Atlas y obtén tu connection string.
-                    </p>
-                </div>
+                <!-- Register Form -->
+                <form id="registerForm" class="auth-form hidden">
+                    <div class="form-group">
+                        <label for="registerName">Nombre</label>
+                        <input type="text" id="registerName" required placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Contraseña</label>
+                        <input type="password" id="registerPassword" required placeholder="••••••••" minlength="6">
+                    </div>
+                    <button type="submit" class="btn-primary btn-full" id="registerBtn">Crear Cuenta</button>
+                </form>
+                <p class="auth-switch">
+                    <span id="authSwitchText">¿No tienes cuenta?</span>
+                    <a href="#" id="authSwitchBtn">Regístrate</a>
+                </p>
             </div>
         </div>
     </div>
@@ -346,17 +344,12 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script src="mongodb.js"></script>
     <script src="math-keyboard.js"></script>
     <script src="drawing-canvas.js"></script>
     <script src="graph-tool.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
-    <script src="expr-to-image.js"></script>
-    <script src="math-to-image.js"></script>
-    <script src="math-tools.js"></script>
-    <script src="math-live.js"></script>
-    <script src="app.js"></script>
+    <script src="math-tools.js"></script>\n    <script src="app.js"></script>
 </body>
 </html>
 
