@@ -7,33 +7,33 @@
 /* CSS Variables */
 :root {
     --bg-primary: #0a0a0f;
-    --bg-secondary: #12121a;
-    --bg-tertiary: #1a1a24;
-    --bg-card: #16161f;
-    --bg-hover: #1e1e2a;
+    --bg-secondary: #0f0f14;
+    --bg-tertiary: #16161f;
+    --bg-card: #14141c;
+    --bg-hover: #1c1c26;
     
     --accent-primary: #818cf8;
     --accent-secondary: #6366f1;
     --accent-tertiary: #4f46e5;
-    --accent-success: #10b981;
-    --accent-warning: #f59e0b;
+    --accent-success: #22c55e;
+    --accent-warning: #eab308;
     --accent-danger: #ef4444;
     
-    --text-primary: #f1f5f9;
+    --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
     
     --border-subtle: rgba(255, 255, 255, 0.06);
     --border-default: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.15);
+    --border-strong: rgba(255, 255, 255, 0.18);
     
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-    --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+    --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+    --shadow-glow: 0 0 48px rgba(99, 102, 241, 0.12);
     
-    --radius-sm: 6px;
-    --radius-md: 10px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
     
@@ -41,7 +41,7 @@
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
     
     --sidebar-width: 300px;
-    --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition: 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Reset */
@@ -52,8 +52,9 @@
 }
 
 html {
-    font-size: 15px;
+    font-size: 16px;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -123,7 +124,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px;
+    padding: 22px 20px;
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -180,7 +181,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 14px 22px;
+    padding: 14px 24px;
     background: linear-gradient(135deg, var(--accent-secondary), var(--accent-tertiary));
     border: none;
     border-radius: var(--radius-md);
@@ -189,13 +190,13 @@ body {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    transition: transform var(--transition), box-shadow var(--transition);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
 }
 
 .btn-new-note:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
 }
 
 .btn-new-note:active {
@@ -533,36 +534,47 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px;
+    padding: 18px 20px;
     border-top: 1px solid var(--border-subtle);
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
+    gap: 12px;
 }
 
 .sync-status {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 13px;
+    font-weight: 500;
     color: var(--text-muted);
 }
 
 .sync-indicator {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--accent-warning);
-    animation: pulse 2s infinite;
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
 }
 
 .sync-status.synced .sync-indicator {
     background: var(--accent-success);
     animation: none;
-    box-shadow: 0 0 8px var(--accent-success);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+}
+
+.sync-status.synced .sync-text {
+    color: var(--accent-success);
 }
 
 .sync-status.error .sync-indicator {
     background: var(--accent-danger);
     animation: none;
+}
+
+.sync-status.error .sync-text {
+    color: var(--text-muted);
 }
 
 @keyframes pulse {
@@ -572,7 +584,23 @@ body {
 
 .footer-actions {
     display: flex;
-    gap: 4px;
+    gap: 6px;
+}
+
+.footer-actions .btn-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    transition: color var(--transition), background var(--transition);
+}
+
+.footer-actions .btn-icon:hover {
+    color: var(--accent-primary);
+    background: rgba(129, 140, 248, 0.12);
 }
 
 /* Main Content */
@@ -627,33 +655,40 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 32px;
+    padding: 36px 40px;
     overflow: hidden;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .notes-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 16px;
 }
 
 .header-left {
     display: flex;
     align-items: baseline;
-    gap: 12px;
+    gap: 14px;
 }
 
 .notes-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     color: var(--text-primary);
-    letter-spacing: -0.5px;
+    letter-spacing: -0.6px;
+    line-height: 1.2;
 }
 
 .notes-count {
     font-size: 14px;
     color: var(--text-muted);
+    font-weight: 500;
 }
 
 .notes-sort {
@@ -689,10 +724,10 @@ body {
     flex: 1;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 22px;
     align-content: start;
-    padding-right: 8px;
+    padding-right: 12px;
 }
 
 /* Note Card */
@@ -700,12 +735,12 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 22px;
     cursor: pointer;
-    transition: var(--transition);
+    transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
     position: relative;
     overflow: hidden;
 }
@@ -723,8 +758,8 @@ body {
 }
 
 .note-card:hover {
-    transform: translateY(-4px);
-    border-color: var(--border-default);
+    transform: translateY(-6px);
+    border-color: var(--border-strong);
     box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
@@ -733,12 +768,13 @@ body {
 }
 
 .note-card-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    letter-spacing: -0.2px;
 }
 
 .note-card-subject {
@@ -746,17 +782,18 @@ body {
     align-items: center;
     gap: 6px;
     font-size: 12px;
+    font-weight: 500;
     color: var(--accent-primary);
-    background: rgba(129, 140, 248, 0.1);
-    padding: 4px 10px;
+    background: rgba(129, 140, 248, 0.12);
+    padding: 5px 12px;
     border-radius: 20px;
     width: fit-content;
 }
 
 .note-card-preview {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-secondary);
-    line-height: 1.6;
+    line-height: 1.65;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
@@ -767,7 +804,8 @@ body {
 .note-card-date {
     font-size: 12px;
     color: var(--text-muted);
-    padding-top: 8px;
+    padding-top: 10px;
+    margin-top: auto;
     border-top: 1px solid var(--border-subtle);
 }
 
@@ -775,8 +813,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-subtle);
+    padding-top: 10px;
+    margin-top: -4px;
+    border-top: none;
 }
 
 .note-download {
@@ -814,7 +853,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px;
+    padding: 80px 40px;
     text-align: center;
     flex: 1;
 }
@@ -824,9 +863,10 @@ body {
 }
 
 .empty-illustration {
-    width: 160px;
-    height: 160px;
-    margin-bottom: 24px;
+    width: 140px;
+    height: 140px;
+    margin-bottom: 28px;
+    opacity: 0.9;
 }
 
 .empty-illustration svg {
@@ -835,15 +875,18 @@ body {
 }
 
 .empty-title {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     color: var(--text-primary);
+    letter-spacing: -0.3px;
 }
 
 .empty-text {
     color: var(--text-muted);
     font-size: 15px;
+    max-width: 280px;
+    line-height: 1.5;
 }
 
 /* Loading State */

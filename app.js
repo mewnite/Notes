@@ -17,7 +17,9 @@
     const CONFIG = {
         AUTO_SAVE_DELAY: 500,
         SYNC_DEBOUNCE: 1000,
-        MAX_FILE_SIZE: 5 * 1024 * 1024
+        MAX_FILE_SIZE: 5 * 1024 * 1024,
+        SERVER_URL: 'https://notes-ekmk.onrender.com',
+        MONGODB_URI: 'mongodb+srv://notesuser:YTUAfrXk93dGexMf@notessync.tjyuvhc.mongodb.net/?appName=notessync'
     };
 
     // ========================================
@@ -691,78 +693,34 @@
             loadNotes();
         });
         
-        elements.settingsBtn.addEventListener('click', async () => {
-            if (MongoDBManager.isConnected()) {
-                if (confirm('¿Desconectar MongoDB? Tus notas locales se mantendrán.')) {
-                    MongoDBManager.disconnect();
-                    elements.userInfo.classList.add('hidden');
-                    updateSyncStatus('offline');
-                    elements.authModal.classList.remove('hidden');
-                    showToast('Desconectado. Tus notas están guardadas localmente.', 'info');
-                }
-            } else {
-                elements.authModal.classList.remove('hidden');
-            }
-        });
-        
-        elements.logoutBtn.addEventListener('click', () => {
-            if (confirm('¿Desconectar MongoDB? Tus notas locales se mantendrán.')) {
-                MongoDBManager.disconnect();
-                elements.userInfo.classList.add('hidden');
-                updateSyncStatus('offline');
-                elements.authModal.classList.remove('hidden');
-                showToast('Desconectado. Tus notas están guardadas localmente.', 'info');
-            }
-        });
+        if (elements.settingsBtn) {
+            elements.settingsBtn.addEventListener('click', () => {
+                syncToMongo();
+                loadNotes();
+                showToast('Sincronizado', 'success');
+            });
+        }
+        if (elements.logoutBtn) {
+            elements.logoutBtn.addEventListener('click', () => { updateUserInfo(); });
+        }
         elements.deleteModal.addEventListener('click', e => { if (e.target === elements.deleteModal) elements.deleteModal.classList.add('hidden'); });
         
-        // Auth modal event listeners
-        elements.closeAuthModal.addEventListener('click', () => {
-            // Don't close if already connected
-            if (!MongoDBManager.isConnected()) {
-                // Allow closing but show again on next action
-            }
-            elements.authModal.classList.add('hidden');
-        });
-        
-        // MongoDB Connection Form
-        elements.mongoConnectForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const serverUrl = elements.connectionString.value.trim();  // Server URL
-            const mongoConnString = elements.mongoUserName.value.trim();  // MongoDB connection string
-            const remember = elements.rememberConnection ? elements.rememberConnection.checked : false;  // Remember preference
-            elements.connectBtn.disabled = true;
-            elements.connectBtn.textContent = 'Conectando...';
-            try {
-                // Validar formato del servidor
-                if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-                    throw new Error('La URL del servidor debe iniciar con http:// o https://');
-                }
-                // Validar formato de MongoDB
-                if (!mongoConnString.startsWith('mongodb+srv://') && !mongoConnString.startsWith('mongodb://')) {
-                    throw new Error('La cadena de MongoDB debe iniciar con mongodb+srv:// o mongodb://');
-                }
-                // Configurar servidor y conectar
-                MongoDBManager.setServerUrl(serverUrl);
-                await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
-                // Guardar preferencia de recordar
-                MongoDBManager.setRemember(remember);
-                elements.authModal.classList.add('hidden');
-                showToast('¡Conectado a MongoDB!', 'success');
-                initWebSocket();
-                await loadNotes();
-            } catch (err) {
-                showToast(err.message || 'Error al conectar', 'error');
-            } finally {
-                elements.connectBtn.disabled = false;
-                elements.connectBtn.textContent = 'Conectar';
-            }
-        });
-        
-        // Remove old login/register handlers
-        // elements.loginForm removed
-        // elements.registerForm removed
-        // elements.authSwitchBtn removed
+        if (elements.closeAuthModal) elements.closeAuthModal.addEventListener('click', () => { if (elements.authModal) elements.authModal.classList.add('hidden'); });
+        if (elements.mongoConnectForm) {
+            elements.mongoConnectForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!elements.connectionString || !elements.mongoUserName) return;
+                const serverUrl = elements.connectionString.value.trim();
+                const mongoConnString = elements.mongoUserName.value.trim();
+                try {
+                    MongoDBManager.setServerUrl(serverUrl);
+                    await MongoDBManager.connect(mongoConnString, { name: 'Usuario' });
+                    if (elements.authModal) elements.authModal.classList.add('hidden');
+                    initWebSocket();
+                    await loadNotes();
+                } catch (err) { showToast(err.message || 'Error al conectar', 'error'); }
+            });
+        }
         
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); if (elements.editorView.classList.contains('hidden')) createNewNote(); }
@@ -839,30 +797,26 @@
         window.downloadFile = downloadFile;
         window.exportNote = exportNote;
         
-        // Siempre intentamos cargar primero desde caché local
+        // Conexión fija a Render + MongoDB (sin modal de login)
+        MongoDBManager.setServerUrl(CONFIG.SERVER_URL);
+        MongoDBManager.setConnection(CONFIG.MONGODB_URI, { name: 'Usuario' });
+        MongoDBManager.setRemember(true);
+        
         loadFromLocalCache();
         extractSubjects();
         renderNotes();
         renderSubjects();
         renderFiles();
         
-        // Si ya había una conexión guardada, la reutilizamos
         try {
-            if (MongoDBManager.isConnected()) {
-                updateSyncStatus('synced');
-                updateUserInfo();
-                initWebSocket();
-                await loadNotes();
-            } else {
-                // Sin conexión previa: mostrar modal para que pegues
-                // la URL de Render y el string de MongoDB
-                updateSyncStatus('offline');
-                elements.authModal.classList.remove('hidden');
-            }
+            updateSyncStatus('syncing');
+            initWebSocket();
+            await loadNotes();
+            updateSyncStatus('synced');
         } catch (err) {
             console.error('Init connect failed:', err);
-            updateSyncStatus('offline');
-            showToast('Modo offline - notas cargadas localmente', 'info');
+            updateSyncStatus('error');
+            showToast('No se pudo conectar - usando caché local', 'info');
         }
     }
 
