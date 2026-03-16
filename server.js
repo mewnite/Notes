@@ -259,6 +259,7 @@ app.post('/api/notes', async (req, res) => {
         await notesCollection.insertMany(notesToInsert);
       }
       
+      broadcastChange('synced', { count: notes.length });
       return res.json({ ok: true, count: notes.length });
     }
     
@@ -288,6 +289,7 @@ app.post('/api/notes', async (req, res) => {
     
     await userClient.close();
     
+    broadcastChange('synced', { count: notes.length });
     res.json({ ok: true, count: notes.length });
   } catch (err) {
     console.error('Error saving notes:', err);

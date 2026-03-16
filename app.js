@@ -210,6 +210,7 @@
             
             await MongoDBManager.writeNotes(data);
             state.lastSaveTime = Date.now();
+            lastSyncByUs = Date.now();
             updateSaveStatus('saved');
             saveToLocalCache();
             
@@ -232,33 +233,31 @@
     // ========================================
     // DATA OPERATIONS
     // ========================================
-    async function loadNotes() {
-        showLoading(true);
-        updateSyncStatus('syncing');
+    async function loadNotes(silent) {
+        if (!silent) {
+            showLoading(true);
+            updateSyncStatus('syncing');
+        }
         
         try {
             // readNotes() devuelve el array de notas directamente (no { notes })
             const notes = await MongoDBManager.readNotes();
             state.notes = Array.isArray(notes) ? notes : [];
-            // Archivos se mantienen desde caché local (el API actual solo sincroniza notas)
             if (!state.files) state.files = [];
             
             saveToLocalCache();
-            
             updateSyncStatus('synced');
-            showToast('Notas cargadas desde MongoDB', 'success');
+            if (!silent) showToast('Notas cargadas desde MongoDB', 'success');
         } catch (error) {
             console.error('Load error:', error);
-            
             if (!loadFromLocalCache()) {
                 state.notes = [];
                 state.files = [];
             }
-            
             updateSyncStatus('error');
-            showToast('Sin conexión - modo offline', 'info');
+            if (!silent) showToast('Sin conexión - modo offline', 'info');
         } finally {
-            showLoading(false);
+            if (!silent) showLoading(false);
             extractSubjects();
             renderNotes();
             renderSubjects();
@@ -750,6 +749,7 @@
                 MongoDBManager.setRemember(remember);
                 elements.authModal.classList.add('hidden');
                 showToast('¡Conectado a MongoDB!', 'success');
+                initWebSocket();
                 await loadNotes();
             } catch (err) {
                 showToast(err.message || 'Error al conectar', 'error');
@@ -781,16 +781,25 @@
     // ========================================
     let socket = null;
     let wsReconnectTimer = null;
+    let lastSyncByUs = 0; // Para no mostrar "otro dispositivo" cuando acabamos de guardar nosotros
     
     function initWebSocket() {
-        // Connect to WebSocket server
-        const wsUrl = window.location.protocol === 'https:' ? 'wss://' + window.location.host : 'ws://' + window.location.host;
-        socket = io();
+        if (typeof io === 'undefined') return;
+        const serverUrl = MongoDBManager.getServerUrl();
+        const url = serverUrl || window.location.origin;
+        if (!serverUrl && window.location.hostname !== 'localhost') return;
+        
+        if (socket) {
+            socket.removeAllListeners();
+            socket.disconnect();
+            socket = null;
+        }
+        
+        socket = io(url, { transports: ['websocket', 'polling'] });
         
         socket.on('connect', () => {
             console.log('WebSocket connected:', socket.id);
-            updateSyncStatus('connected');
-            showToast('Conectado en tiempo real', 'success');
+            updateSyncStatus('synced');
             if (wsReconnectTimer) {
                 clearTimeout(wsReconnectTimer);
                 wsReconnectTimer = null;
@@ -799,9 +808,7 @@
         
         socket.on('disconnect', () => {
             console.log('WebSocket disconnected');
-            updateSyncStatus('offline');
-            showToast('Conexión perdida - Modo offline', 'error');
-            // Try to reconnect
+            updateSyncStatus('error');
             wsReconnectTimer = setTimeout(initWebSocket, 3000);
         });
         
@@ -809,20 +816,11 @@
             console.log('WebSocket handshake complete:', data);
         });
         
-        // Listen for note changes from other clients
         socket.on('notesChanged', async (event) => {
-            console.log('Notes changed:', event.action, event.data);
-            
-            // Don't reload if we're the ones making the change
-            // The server broadcasts to ALL clients including sender
-            // So we need to check if this is our own change or from another client
-            
-            // For now, always reload to stay in sync
-            // The debounce in loadNotes will prevent rapid reloads
-            if (MongoDBManager.isConnected()) {
-                await loadNotes();
-                showToast('Notas actualizadas desde otro dispositivo', 'info');
-            }
+            if (!MongoDBManager.isConnected()) return;
+            const isOurSave = Date.now() - lastSyncByUs < 3000;
+            await loadNotes(true);
+            if (!isOurSave) showToast('Notas actualizadas en tiempo real', 'info');
         });
         
         socket.on('error', (error) => {
@@ -851,8 +849,9 @@
         // Si ya había una conexión guardada, la reutilizamos
         try {
             if (MongoDBManager.isConnected()) {
-                updateSyncStatus('connected');
+                updateSyncStatus('synced');
                 updateUserInfo();
+                initWebSocket();
                 await loadNotes();
             } else {
                 // Sin conexión previa: mostrar modal para que pegues
