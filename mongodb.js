@@ -1,21 +1,21 @@
 /**
- * Browser-side MongoDB adapter that calls the deployed backend API.
- * It supports overriding the API base URL via localStorage, but defaults
- * to the public Render deployment.
- * Now includes JWT-based authentication.
+ * Browser-side MongoDB adapter
+ * Connects to a backend server that handles MongoDB connections
  */
 
 const MongoDBManager = (function() {
     'use strict';
 
-    const DEFAULT_API = 'https://notes-ekmk.onrender.com';
-    const STORAGE_KEY_API = 'notes_sync_api_base';
-    const STORAGE_KEY_TOKEN = 'notes_sync_token';
+    const STORAGE_KEY_CONNECTION = 'notes_sync_connection_string';
     const STORAGE_KEY_USER = 'notes_sync_user';
+    const STORAGE_KEY_NOTES = 'notes_sync_notes';
+    const STORAGE_KEY_SERVER_URL = 'notes_sync_server_url';
+    const STORAGE_KEY_REMEMBER = 'notes_sync_remember';
 
-    let apiBase = localStorage.getItem(STORAGE_KEY_API) || DEFAULT_API;
-    let authToken = localStorage.getItem(STORAGE_KEY_TOKEN) || null;
+    let connectionString = localStorage.getItem(STORAGE_KEY_CONNECTION) || null;
     let currentUser = null;
+    let serverUrl = localStorage.getItem(STORAGE_KEY_SERVER_URL) || '';
+    let rememberConnection = localStorage.getItem(STORAGE_KEY_REMEMBER) === 'true';
 
     // Try to restore user from localStorage
     try {
@@ -26,177 +26,230 @@ const MongoDBManager = (function() {
     } catch (e) {}
 
     function init() {
-        // ensure default stored
-        try { localStorage.setItem(STORAGE_KEY_API, apiBase); } catch (e) {}
         return true;
     }
 
-    function getAuthHeader() {
-        if (!authToken) return {};
-        return { 'Authorization': 'Bearer ' + authToken };
-    }
-
-    function isAuthenticated() { 
-        return !!authToken && !!currentUser; 
+    function isConnected() { 
+        return !!connectionString && !!currentUser; 
     }
     
     function getUser() { 
-        return currentUser; 
+        return currentUser || { name: 'Usuario local' }; 
     }
 
-    function getConnection() { return apiBase; }
+    function getConnection() { 
+        return connectionString ? 'Conectado a MongoDB' : 'No conectado';
+    }
     
-    function setConnection(uri) {
-        if (!uri || !uri.startsWith('http')) {
-            throw new Error('API URL must start with http(s)');
-        }
-        apiBase = uri.replace(/\/$/, '');
-        localStorage.setItem(STORAGE_KEY_API, apiBase);
+    function setConnection(connString, userData) {
+        connectionString = connString;
+        currentUser = userData || { name: 'Usuario local' };
+        
+        localStorage.setItem(STORAGE_KEY_CONNECTION, connectionString);
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
+        
+        return true;
     }
 
-    async function login(email, password) {
+    // Configure the server URL
+    function setServerUrl(url) {
+        serverUrl = url;
+        localStorage.setItem(STORAGE_KEY_SERVER_URL, serverUrl);
+    }
+
+    function getServerUrl() {
+        return serverUrl;
+    }
+
+    // Remember connection preference
+    function setRemember(remember) {
+        rememberConnection = remember;
+        localStorage.setItem(STORAGE_KEY_REMEMBER, remember ? 'true' : 'false');
+    }
+
+    function getRemember() {
+        return rememberConnection;
+    }
+
+    async function connect(connString, userData) {
         try {
-            const res = await fetch(apiBase + '/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            if (!res.ok) {
-                const error = await res.json().catch(() => ({ error: 'Login failed' }));
-                throw new Error(error.error || 'Login failed');
+            setConnection(connString, userData || { name: 'Usuario' });
+            
+            console.log('[MongoDB] Connection configured (SRV stored):', connString.substring(0, 30) + '...');
+            
+            // Try to fetch notes from server
+            try {
+                const notesData = await readNotes();
+                if (notesData && notesData.length > 0) {
+                    console.log('[MongoDB] Cargadas', notesData.length, 'notas del servidor');
+                }
+            } catch (e) {
+                console.log('[MongoDB] No se pudo conectar al servidor');
             }
-            const data = await res.json();
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem(STORAGE_KEY_TOKEN, authToken);
-            localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
+            
             return currentUser;
         } catch (error) {
-            console.error('[MongoDB] login error', error);
+            console.error('[MongoDB] Error de conexión:', error);
             throw error;
         }
     }
 
-    async function register(name, email, password) {
-        try {
-            const res = await fetch(apiBase + '/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password })
-            });
-            if (!res.ok) {
-                const error = await res.json().catch(() => ({ error: 'Registration failed' }));
-                throw new Error(error.error || 'Registration failed');
-            }
-            const data = await res.json();
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem(STORAGE_KEY_TOKEN, authToken);
-            localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
-            return currentUser;
-        } catch (error) {
-            console.error('[MongoDB] register error', error);
-            throw error;
-        }
-    }
-
-    function logout() {
-        authToken = null;
+    function disconnect() {
+        connectionString = null;
         currentUser = null;
-        apiBase = DEFAULT_API;
-        try { 
-            localStorage.removeItem(STORAGE_KEY_TOKEN); 
-            localStorage.removeItem(STORAGE_KEY_USER);
-            localStorage.removeItem(STORAGE_KEY_API); 
-        } catch (e) {}
+        localStorage.removeItem(STORAGE_KEY_CONNECTION);
+        localStorage.removeItem(STORAGE_KEY_USER);
     }
 
-    async function testConnection(uri) {
-        // If a full URL is provided, test it; otherwise test current apiBase
-        const target = (uri && uri.startsWith('http')) ? uri.replace(/\/$/, '') : apiBase;
+    // Read notes from the backend server
+    async function readNotes() {
         try {
-            const res = await fetch(target + '/');
-            return res.ok;
+            // Use serverUrl if set, otherwise use current origin
+            const baseUrl = serverUrl || window.location.origin;
+            const url = new URL('/api/notes', baseUrl);
+            if (connectionString) {
+                url.searchParams.set('conn', connectionString);
+            }
+            
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-mongodb-conn': connectionString || ''
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error del servidor: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Save to localStorage as backup
+            localStorage.setItem(STORAGE_KEY_NOTES, JSON.stringify({ notes: data.notes || [], lastSync: Date.now() }));
+            
+            return data.notes || [];
         } catch (e) {
-            console.error('[MongoDB] testConnection failed', e);
+            // Silently handle server errors, fallback to localStorage
+            // Don't log 404 errors to console to avoid spam
+            
+            // Fallback to localStorage
+            const data = localStorage.getItem(STORAGE_KEY_NOTES);
+            if (data) {
+                return JSON.parse(data).notes || [];
+            }
+            return [];
+        }
+    }
+
+    // Write notes to the backend server
+    async function writeNotesToServer(notes) {
+        try {
+            // Use serverUrl if set, otherwise use current origin
+            const baseUrl = serverUrl || window.location.origin;
+            const url = new URL('/api/notes', baseUrl);
+            if (connectionString) {
+                url.searchParams.set('conn', connectionString);
+            }
+            
+            const response = await fetch(url.toString(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-mongodb-conn': connectionString || ''
+                },
+                body: JSON.stringify({ 
+                    notes: notes
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error del servidor: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (e) {
+            // Silently handle server errors, don't log to console
+            throw e;
+        }
+    }
+
+    // Write notes to storage
+    async function writeNotes(data) {
+        try {
+            // Save to localStorage first
+            localStorage.setItem(STORAGE_KEY_NOTES, JSON.stringify(data));
+            
+            // Also try to save to server if connected
+            if (isConnected()) {
+                try {
+                    await writeNotesToServer(data.notes);
+                    // Silently handle success, don't log to console
+                } catch (e) {
+                    // Silently handle server errors, don't log to console
+                }
+            }
+            
+            return true;
+        } catch (e) {
+            console.error('[MongoDB] Error escribiendo notas:', e);
             return false;
         }
     }
 
-    async function readNotes() {
-        if (!authToken) {
-            throw new Error('Authentication required');
+    // Legacy function names for compatibility
+    async function saveNote(note) {
+        const data = await readNotes();
+        let notes = data.notes || [];
+        
+        const existingIndex = notes.findIndex(n => n._id === note._id);
+        
+        if (existingIndex >= 0) {
+            notes[existingIndex] = note;
+        } else {
+            note._id = note._id || 'note_' + Date.now();
+            notes.push(note);
         }
-        try {
-            const res = await fetch(apiBase + '/notes', {
-                headers: { ...getAuthHeader() }
-            });
-            if (!res.ok) {
-                if (res.status === 401 || res.status === 403) {
-                    // Token expired or invalid
-                    logout();
-                    throw new Error('Session expired. Please login again.');
-                }
-                throw new Error('Failed to fetch notes: ' + res.status);
-            }
-            const docs = await res.json();
-            const notes = (docs || []).map(d => ({
-                id: d._id || d.id || null,
-                title: d.title || '',
-                subject: d.subject || '',
-                tags: d.tags || [],
-                content: d.content || '',
-                createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-                modifiedAt: d.modifiedAt ? new Date(d.modifiedAt).toISOString() : new Date().toISOString()
-            }));
-            return { version: '3.0', lastSync: new Date().toISOString(), notes, files: [] };
-        } catch (error) {
-            console.error('[MongoDB] readNotes error', error);
-            throw error;
-        }
+        
+        await writeNotes({ notes: notes, lastSync: Date.now() });
+        return note;
     }
 
-    async function writeNotes(data) {
-        if (!authToken) {
-            throw new Error('Authentication required');
-        }
-        try {
-            const res = await fetch(apiBase + '/notes', {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...getAuthHeader()
-                },
-                body: JSON.stringify(data)
-            });
-            if (!res.ok) {
-                if (res.status === 401 || res.status === 403) {
-                    logout();
-                    throw new Error('Session expired. Please login again.');
-                }
-                const body = await res.text().catch(() => '');
-                throw new Error('Write failed: ' + res.status + ' ' + body);
-            }
-            return await res.json();
-        } catch (error) {
-            console.error('[MongoDB] writeNotes error', error);
-            throw error;
-        }
+    async function deleteNote(noteId) {
+        const data = await readNotes();
+        const notes = (data.notes || []).filter(n => n._id !== noteId);
+        await writeNotes({ notes: notes, lastSync: Date.now() });
+        return true;
     }
 
+    async function getAllNotes() {
+        const data = await readNotes();
+        return data.notes || [];
+    }
+
+    async function syncNotes(notes) {
+        await writeNotes({ notes: notes, lastSync: Date.now() });
+        return notes;
+    }
+
+    // Public API
     return {
         init,
-        isAuthenticated,
+        connect,
+        disconnect,
+        isConnected,
         getUser,
         getConnection,
         setConnection,
-        login,
-        register,
-        logout,
-        testConnection,
+        setServerUrl,
+        getServerUrl,
+        setRemember,
+        getRemember,
         readNotes,
-        writeNotes
+        writeNotes,
+        saveNote,
+        deleteNote,
+        getAllNotes,
+        syncNotes
     };
 })();
-
-window.MongoDBManager = MongoDBManager;
