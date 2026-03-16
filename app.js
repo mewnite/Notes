@@ -237,9 +237,11 @@
         updateSyncStatus('syncing');
         
         try {
-            const data = await MongoDBManager.readNotes();
-            state.notes = data.notes || [];
-            state.files = data.files || [];
+            // readNotes() devuelve el array de notas directamente (no { notes })
+            const notes = await MongoDBManager.readNotes();
+            state.notes = Array.isArray(notes) ? notes : [];
+            // Archivos se mantienen desde caché local (el API actual solo sincroniza notas)
+            if (!state.files) state.files = [];
             
             saveToLocalCache();
             
