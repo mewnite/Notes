@@ -213,10 +213,11 @@ app.get('/api/notes', async (req, res) => {
       return res.json({ notes });
     }
     
-    // Connect to user's MongoDB
+    // Connect to user's MongoDB (usar misma base que el servidor: notesdb)
+    const dbName = process.env.MONGODB_DB || 'notesdb';
     const userClient = new MongoClient(connectionString);
     await userClient.connect();
-    const userDb = userClient.db();
+    const userDb = userClient.db(dbName);
     const userNotesCollection = userDb.collection('notes');
     
     const notes = await userNotesCollection.find({}).toArray();
@@ -261,10 +262,11 @@ app.post('/api/notes', async (req, res) => {
       return res.json({ ok: true, count: notes.length });
     }
     
-    // Connect to user's MongoDB
+    // Connect to user's MongoDB (usar misma base que el servidor: notesdb)
+    const dbName = process.env.MONGODB_DB || 'notesdb';
     const userClient = new MongoClient(connectionString);
     await userClient.connect();
-    const userDb = userClient.db();
+    const userDb = userClient.db(dbName);
     const userNotesCollection = userDb.collection('notes');
     
     // Delete existing notes
