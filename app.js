@@ -74,6 +74,18 @@
         elements.subjectsList = document.getElementById('subjectsList');
         elements.wordCount = document.getElementById('wordCount');
         elements.charCount = document.getElementById('charCount');
+
+        // Editor enhancements
+        elements.templateBtn = document.getElementById('templateBtn');
+        elements.templateDropdown = document.getElementById('templateDropdown');
+        elements.viewToggleBtn = document.getElementById('viewToggleBtn');
+        elements.editorSplit = document.getElementById('editorSplit');
+        elements.editorPaneEdit = document.getElementById('editorPaneEdit');
+        elements.editorPanePreview = document.getElementById('editorPanePreview');
+        elements.notePreview = document.getElementById('notePreview');
+        elements.backlinksPanel = document.getElementById('backlinksPanel');
+        elements.latexPresetsBtn = document.getElementById('latexPresetsBtn');
+        elements.latexPresetsDropdown = document.getElementById('latexPresetsDropdown');
         
         // MongoDB connection modal
         elements.authModal = document.getElementById('authModal');
@@ -143,6 +155,161 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function escapeAttr(text) {
+        return String(text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ========================================
+    // MARKDOWN + MATH PREVIEW
+    // ========================================
+    const VIEW_MODE_KEY = 'notes_sync_view_mode';
+    state.viewMode = localStorage.getItem(VIEW_MODE_KEY) || 'edit'; // edit | split | preview
+
+    function applyViewMode() {
+        const mode = state.viewMode;
+        if (!elements.editorSplit || !elements.editorPaneEdit || !elements.editorPanePreview) return;
+
+        elements.editorSplit.classList.toggle('split', mode === 'split');
+
+        if (mode === 'edit') {
+            elements.editorPaneEdit.classList.remove('hidden');
+            elements.editorPanePreview.classList.add('hidden');
+        } else if (mode === 'preview') {
+            elements.editorPaneEdit.classList.add('hidden');
+            elements.editorPanePreview.classList.remove('hidden');
+        } else {
+            // split
+            elements.editorPaneEdit.classList.remove('hidden');
+            elements.editorPanePreview.classList.remove('hidden');
+        }
+        localStorage.setItem(VIEW_MODE_KEY, mode);
+    }
+
+    function cycleViewMode() {
+        state.viewMode = state.viewMode === 'edit' ? 'split' : state.viewMode === 'split' ? 'preview' : 'edit';
+        applyViewMode();
+        updatePreview();
+    }
+
+    function tokenizeMath(text) {
+        const blocks = [];
+        const inlines = [];
+        let out = String(text || '');
+
+        // Block math $$...$$ (multiline)
+        out = out.replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr) => {
+            const idx = blocks.push(expr) - 1;
+            return `@@MATHBLOCK_${idx}@@`;
+        });
+
+        // Inline math $...$ (single-line-ish)
+        out = out.replace(/\$([^\n$]+?)\$/g, (_m, expr) => {
+            const idx = inlines.push(expr) - 1;
+            return `@@MATHINLINE_${idx}@@`;
+        });
+
+        return { text: out, blocks, inlines };
+    }
+
+    function renderMathPlaceholders(html, tokens) {
+        if (typeof katex === 'undefined') return html;
+        let out = html;
+
+        out = out.replace(/@@MATHBLOCK_(\d+)@@/g, (_m, n) => {
+            const expr = tokens.blocks[Number(n)] ?? '';
+            try {
+                return katex.renderToString(expr, { throwOnError: false, displayMode: true });
+            } catch (e) {
+                return escapeHtml(`$$${expr}$$`);
+            }
+        });
+
+        out = out.replace(/@@MATHINLINE_(\d+)@@/g, (_m, n) => {
+            const expr = tokens.inlines[Number(n)] ?? '';
+            try {
+                return katex.renderToString(expr, { throwOnError: false, displayMode: false });
+            } catch (e) {
+                return escapeHtml(`$${expr}$`);
+            }
+        });
+
+        return out;
+    }
+
+    function renderMarkdown(text) {
+        const raw = String(text || '');
+        const tokens = tokenizeMath(raw);
+
+        // Convert [[Title]] to anchors after markdown render
+        const md = tokens.text;
+        let html = md;
+
+        if (typeof marked !== 'undefined') {
+            html = marked.parse(md, { breaks: true, gfm: true });
+        } else {
+            html = escapeHtml(md).replace(/\n/g, '<br>');
+        }
+
+        // Internal note links
+        html = html.replace(/\[\[([^\]]+)\]\]/g, (_m, title) => {
+            const t = String(title || '').trim();
+            if (!t) return _m;
+            return `<a href="#" class="note-link" data-note-title="${escapeAttr(t)}">${escapeHtml(t)}</a>`;
+        });
+
+        // Sanitize
+        if (typeof DOMPurify !== 'undefined') {
+            html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+        }
+
+        // Replace math placeholders with KaTeX HTML
+        html = renderMathPlaceholders(html, tokens);
+        return html;
+    }
+
+    let previewTimer = null;
+    function updatePreview() {
+        if (!elements.notePreview || !elements.noteContent) return;
+        if (previewTimer) clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => {
+            elements.notePreview.innerHTML = renderMarkdown(elements.noteContent.value);
+            renderBacklinks();
+        }, 150);
+    }
+
+    function findNoteByTitle(title) {
+        const t = String(title || '').trim().toLowerCase();
+        if (!t) return null;
+        return state.notes.find(n => String(n.title || '').trim().toLowerCase() === t) || null;
+    }
+
+    function renderBacklinks() {
+        if (!elements.backlinksPanel || !state.currentNote) return;
+        const currentTitle = String(state.currentNote.title || '').trim();
+        if (!currentTitle) {
+            elements.backlinksPanel.innerHTML = '';
+            return;
+        }
+
+        const needle = `[[${currentTitle.toLowerCase()}]]`;
+        const hits = state.notes
+            .filter(n => n && n.id !== state.currentNote.id)
+            .filter(n => String(n.content || '').toLowerCase().includes(needle))
+            .slice(0, 12);
+
+        if (hits.length === 0) {
+            elements.backlinksPanel.innerHTML = '';
+            return;
+        }
+
+        elements.backlinksPanel.innerHTML = `
+            <div class="backlinks-title">Referencias a esta nota</div>
+            <div class="backlinks-list">
+                ${hits.map(n => `<button class="backlinks-chip" data-note-id="${escapeAttr(n.id)}">${escapeHtml(n.title || 'Sin título')}</button>`).join('')}
+            </div>
+        `;
     }
 
     // ========================================
@@ -565,6 +732,8 @@
         autosizeTextarea(elements.noteContent);
         
         updateWordCount();
+        applyViewMode();
+        updatePreview();
         elements.noteTitle.focus();
     }
 
@@ -610,6 +779,74 @@
         URL.revokeObjectURL(url);
     }
 
+    function insertTemplate(key) {
+        if (!elements.noteContent) return;
+        const now = new Date().toISOString();
+        const templates = {
+            class: `# Clase\n\n## Tema\n\n## Objetivo\n- \n\n## Teoría\n\n## Fórmulas clave\n- \n\n## Ejemplos\n\n## Dudas / pendientes\n- \n\n---\n_Fecha: ${now}_\n`,
+            practice: `# Práctica\n\n## Enunciado\n\n## Datos\n- \n\n## Desarrollo\n\n## Resultado\n\n## Verificación / comentario\n\n---\n_Fecha: ${now}_\n`,
+            exam: `# Parcial / Final\n\n## Tema\n\n## Resumen rápido\n\n## Ejercicios tipo\n\n## Errores comunes\n- \n\n## Fórmulas clave\n- \n\n---\n_Fecha: ${now}_\n`
+        };
+        const t = templates[key];
+        if (!t) return;
+
+        const current = elements.noteContent.value || '';
+        const insert = current.trim() ? `\n\n${t}` : t;
+        const start = elements.noteContent.selectionStart || current.length;
+        const end = elements.noteContent.selectionEnd || current.length;
+        elements.noteContent.setRangeText(insert, start, end, 'end');
+        saveCurrentNote();
+        updatePreview();
+        showToast('Plantilla insertada', 'success');
+    }
+
+    function insertAtCursor(text) {
+        if (!elements.noteContent) return;
+        const el = elements.noteContent;
+        const cur = el.value || '';
+        const start = Number.isFinite(el.selectionStart) ? el.selectionStart : cur.length;
+        const end = Number.isFinite(el.selectionEnd) ? el.selectionEnd : cur.length;
+        el.setRangeText(text, start, end, 'end');
+        el.focus();
+    }
+
+    function insertLatexPreset(key) {
+        if (!elements.noteContent) return;
+
+        const presets = {
+            inline: { text: '$ $', cursorBack: 1 },
+            block: { text: '\n$$\n\n$$\n', cursorBack: 4 },
+            frac: { text: '\\\\frac{}{}', cursorBack: 3 },
+            sqrt: { text: '\\\\sqrt{}', cursorBack: 1 },
+            pow: { text: '^{}', cursorBack: 1 },
+            sub: { text: '_{}', cursorBack: 1 },
+            sum: { text: '\\\\sum_{i=1}^{n} ', cursorBack: 0 },
+            int: { text: '\\\\int_{a}^{b} ', cursorBack: 0 },
+            lim: { text: '\\\\lim_{x\\\\to 0} ', cursorBack: 0 },
+            matrix: { text: '\\\\begin{bmatrix}  &  \\\\\n  &  \n\\\\end{bmatrix}', cursorBack: 14 }
+        };
+
+        const p = presets[key];
+        if (!p) return;
+
+        const el = elements.noteContent;
+        const cur = el.value || '';
+        const start = Number.isFinite(el.selectionStart) ? el.selectionStart : cur.length;
+        const end = Number.isFinite(el.selectionEnd) ? el.selectionEnd : cur.length;
+
+        el.setRangeText(p.text, start, end, 'end');
+
+        // move cursor inside braces/spaces when needed
+        if (p.cursorBack && p.cursorBack > 0) {
+            const pos = (Number.isFinite(el.selectionStart) ? el.selectionStart : (start + p.text.length)) - p.cursorBack;
+            el.setSelectionRange(pos, pos);
+        }
+
+        el.focus();
+        saveCurrentNote();
+        updatePreview();
+    }
+
     // ========================================
     // EVENT HANDLERS
     // ========================================
@@ -639,7 +876,7 @@
         elements.noteTitle.addEventListener('input', saveCurrentNote);
         elements.noteSubject.addEventListener('input', saveCurrentNote);
         elements.noteTags.addEventListener('input', saveCurrentNote);
-        elements.noteContent.addEventListener('input', (e) => { saveCurrentNote(); autosizeTextarea(e.target); });
+        elements.noteContent.addEventListener('input', (e) => { saveCurrentNote(); autosizeTextarea(e.target); updatePreview(); });
 
         // Keyboard shortcuts in the editor
         elements.noteContent.addEventListener('keydown', (e) => {
@@ -672,6 +909,72 @@
             syncToMongo();
             showToast('Nota guardada', 'success');
         });
+
+        // Templates + View toggle
+        if (elements.viewToggleBtn) {
+            elements.viewToggleBtn.addEventListener('click', () => cycleViewMode());
+        }
+
+        if (elements.templateBtn && elements.templateDropdown) {
+            const closeDropdown = () => elements.templateDropdown.classList.add('hidden');
+            elements.templateBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                elements.templateDropdown.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                if (!elements.templateDropdown) return;
+                const inside = elements.templateDropdown.contains(e.target) || elements.templateBtn.contains(e.target);
+                if (!inside) closeDropdown();
+            });
+            elements.templateDropdown.addEventListener('click', (e) => {
+                const btn = e.target.closest('.dropdown-item');
+                if (!btn) return;
+                const key = btn.getAttribute('data-template');
+                insertTemplate(key);
+                closeDropdown();
+            });
+        }
+
+        // LaTeX presets dropdown (fast type)
+        if (elements.latexPresetsBtn && elements.latexPresetsDropdown) {
+            const close = () => elements.latexPresetsDropdown.classList.add('hidden');
+            elements.latexPresetsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                elements.latexPresetsDropdown.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                const inside = elements.latexPresetsDropdown.contains(e.target) || elements.latexPresetsBtn.contains(e.target);
+                if (!inside) close();
+            });
+            elements.latexPresetsDropdown.addEventListener('click', (e) => {
+                const item = e.target.closest('.dropdown-item');
+                if (!item) return;
+                const key = item.getAttribute('data-latex');
+                insertLatexPreset(key);
+                close();
+            });
+        }
+
+        if (elements.notePreview) {
+            elements.notePreview.addEventListener('click', (e) => {
+                const a = e.target.closest('a.note-link');
+                if (!a) return;
+                e.preventDefault();
+                const title = a.getAttribute('data-note-title') || a.textContent;
+                const note = findNoteByTitle(title);
+                if (note) openNote(note.id);
+                else showToast('No existe una nota con ese título', 'info');
+            });
+        }
+
+        if (elements.backlinksPanel) {
+            elements.backlinksPanel.addEventListener('click', (e) => {
+                const chip = e.target.closest('.backlinks-chip');
+                if (!chip) return;
+                const id = chip.getAttribute('data-note-id');
+                if (id) openNote(id);
+            });
+        }
         
         elements.backBtn.addEventListener('click', closeEditor);
         

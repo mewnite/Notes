@@ -195,6 +195,20 @@
                         <span>Volver</span>
                     </button>
                     <div class="editor-actions">
+                        <div class="editor-tools">
+                            <button class="btn-secondary btn-compact" id="templateBtn" title="Insertar plantilla">
+                                Plantillas
+                            </button>
+                            <div class="dropdown hidden" id="templateDropdown">
+                                <button class="dropdown-item" data-template="class">Clase</button>
+                                <button class="dropdown-item" data-template="practice">Práctica</button>
+                                <button class="dropdown-item" data-template="exam">Parcial / Final</button>
+                            </div>
+
+                            <button class="btn-secondary btn-compact" id="viewToggleBtn" title="Cambiar vista (Editor / Split / Preview)">
+                                Vista
+                            </button>
+                        </div>
                         <button class="btn-save" id="saveNoteBtn" title="Guardar ahora">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -250,11 +264,38 @@
                             <button class="toolbar-btn" id="mathKeyboardBtn" title="Teclado Matemático">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 9h16M4 13h16M4 17h16M4 21h16"/></svg>
                             </button>
+                            <div class="latex-presets">
+                                <button class="toolbar-btn" id="latexPresetsBtn" title="Atajos de LaTeX">Σ LaTeX</button>
+                                <div class="dropdown hidden" id="latexPresetsDropdown">
+                                    <button class="dropdown-item" data-latex="inline">$...$ (inline)</button>
+                                    <button class="dropdown-item" data-latex="block">$$...$$ (bloque)</button>
+                                    <div class="dropdown-sep"></div>
+                                    <button class="dropdown-item" data-latex="frac">\\frac{}{}</button>
+                                    <button class="dropdown-item" data-latex="sqrt">\\sqrt{}</button>
+                                    <button class="dropdown-item" data-latex="pow">^{} (potencia)</button>
+                                    <button class="dropdown-item" data-latex="sub">_{} (subíndice)</button>
+                                    <div class="dropdown-sep"></div>
+                                    <button class="dropdown-item" data-latex="sum">\\sum_{i=1}^{n}</button>
+                                    <button class="dropdown-item" data-latex="int">\\int_{a}^{b}</button>
+                                    <button class="dropdown-item" data-latex="lim">\\lim_{x\\to 0}</button>
+                                    <button class="dropdown-item" data-latex="matrix">bmatrix (2x2)</button>
+                                </div>
+                            </div>
                             <button class="toolbar-btn" id="drawModeBtn" title="Dibujar">🖊️</button>
                             <button class="toolbar-btn" id="graphModeBtn" title="Graficar funciones">📈</button>
                             <button class="toolbar-btn hidden" id="clearDrawingBtn" title="Limpiar">🗑️</button>
                         </div>
-                        <canvas id="drawingCanvas" class="drawing-canvas hidden"></canvas>                        <textarea id="noteContent" placeholder="Escribe tus notas aquí...\nTambién puedes usar markdown para dar formato."></textarea>
+                        <canvas id="drawingCanvas" class="drawing-canvas hidden"></canvas>
+
+                        <div class="editor-split" id="editorSplit">
+                            <div class="editor-pane editor-pane-edit" id="editorPaneEdit">
+                                <textarea id="noteContent" placeholder="Escribe tus notas aquí...\nTip: usa Markdown, $...$ para matemática inline y $$...$$ para bloques.\nTambién podés enlazar notas con [[Título de nota]]."></textarea>
+                            </div>
+                            <div class="editor-pane editor-pane-preview hidden" id="editorPanePreview">
+                                <div class="note-preview" id="notePreview" aria-label="Vista previa"></div>
+                                <div class="backlinks-panel" id="backlinksPanel"></div>
+                            </div>
+                        </div>
                         <div class="editor-hint" id="editorHint">
                             <span>Atajos:</span>
                             <span class="kbd">Ctrl/Cmd + Enter</span>
@@ -302,6 +343,8 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js" crossorigin="anonymous"></script>
     <script src="mongodb.js"></script>
     <script src="math-keyboard.js"></script>
     <script src="drawing-canvas.js"></script>

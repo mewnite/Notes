@@ -970,6 +970,74 @@ body {
     gap: 16px;
 }
 
+.editor-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+}
+
+.btn-secondary.btn-compact {
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-secondary.btn-compact:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+}
+
+.dropdown {
+    position: absolute;
+    top: 44px;
+    left: 0;
+    min-width: 220px;
+    background: rgba(15, 15, 20, 0.96);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 8px;
+    z-index: 30;
+    backdrop-filter: blur(10px);
+}
+
+.dropdown-item {
+    width: 100%;
+    text-align: left;
+    padding: 10px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.dropdown-item:hover {
+    background: rgba(129, 140, 248, 0.12);
+    color: var(--text-primary);
+}
+
+.dropdown-sep {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 8px 4px;
+}
+
+.latex-presets {
+    position: relative;
+}
+
 .save-status {
     font-size: 13px;
     color: var(--text-muted);
@@ -1174,6 +1242,137 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+}
+
+.editor-split {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+.editor-split.split {
+    grid-template-columns: 1fr 1fr;
+}
+
+.editor-pane {
+    min-height: 0;
+}
+
+.editor-pane-edit textarea#noteContent {
+    width: 100%;
+    height: 100%;
+    min-height: 48vh;
+}
+
+.editor-pane-preview {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 18px 18px 12px;
+    overflow: auto;
+}
+
+.note-preview {
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text-secondary);
+}
+
+.note-preview h1, .note-preview h2, .note-preview h3 {
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+    margin: 16px 0 10px;
+}
+
+.note-preview h1 { font-size: 22px; }
+.note-preview h2 { font-size: 18px; }
+.note-preview h3 { font-size: 16px; }
+
+.note-preview p { margin: 10px 0; }
+.note-preview ul, .note-preview ol { margin: 10px 0 10px 20px; }
+.note-preview code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 2px 6px;
+    border-radius: 8px;
+    color: var(--text-primary);
+}
+
+.note-preview pre {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--radius-lg);
+    padding: 14px 14px;
+    overflow: auto;
+}
+
+.note-preview pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.note-preview a.note-link {
+    color: var(--accent-primary);
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(129, 140, 248, 0.5);
+}
+
+.note-preview a.note-link:hover {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+.backlinks-panel {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.backlinks-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.backlinks-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.backlinks-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(129, 140, 248, 0.10);
+    border: 1px solid rgba(129, 140, 248, 0.12);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.backlinks-chip:hover {
+    background: rgba(129, 140, 248, 0.16);
+    transform: translateY(-1px);
+}
+
+.hidden { display: none !important; }
+
+@media (min-width: 1100px) {
+    .editor-split.split {
+        grid-template-columns: 1.15fr 0.85fr;
+    }
 }
 
 .note-content-input {
